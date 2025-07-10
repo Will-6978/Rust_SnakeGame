@@ -74,18 +74,43 @@ fn main() {
                 window.draw_2d(&event, |c, g, device| {
                     clear(BACK_COLOR, g);
                     game.draw(&c, g);
-                    // 右上角显示分数
+                    // 右上角显示分数和关卡（美化）
                     let score_text = format!("分数: {}", game.get_score());
-                    let transform_score = c.transform.trans(480.0, 40.0);
+                    let level_text = format!("关卡: {}", game.get_level());
                     let transform_score_shadow = c.transform.trans(484.0, 44.0);
+                    let transform_score = c.transform.trans(480.0, 40.0);
+                    let transform_level_shadow = c.transform.trans(484.0, 74.0);
+                    let transform_level = c.transform.trans(480.0, 70.0);
                     piston_window::text([0.0, 0.0, 0.0, 0.5], 28, &score_text, &mut glyphs, transform_score_shadow, g).ok();
-                    piston_window::text([1.0, 1.0, 1.0, 1.0], 28, &score_text, &mut glyphs, transform_score, g).unwrap();
+                    piston_window::text([1.0, 1.0, 0.2, 1.0], 28, &score_text, &mut glyphs, transform_score, g).unwrap();
+                    piston_window::text([0.0, 0.0, 0.0, 0.5], 24, &level_text, &mut glyphs, transform_level_shadow, g).ok();
+                    piston_window::text([0.2, 0.8, 1.0, 1.0], 24, &level_text, &mut glyphs, transform_level, g).unwrap();
                     // 在每个障碍物上绘制红色“鬼”字
                     for &(ox, oy) in game.get_obstacles() {
                         let x = (ox as f64) * 20.0 + 2.0;
                         let y = (oy as f64) * 20.0 + 18.0;
                         let transform_ghost = c.transform.trans(x, y);
                         piston_window::text([1.0, 0.0, 0.0, 1.0], 16, "鬼", &mut glyphs, transform_ghost, g).ok();
+                    }
+                    // 游戏结束界面美化
+                    if game.is_game_over() {
+                        use piston_window::rectangle;
+                        // 半透明黑色遮罩
+                        rectangle([0.0, 0.0, 0.0, 0.6], [0.0, 0.0, 600.0, 600.0], c.transform, g);
+                        // 大字“游戏结束”
+                        let over_text = "游戏结束";
+                        let transform_over_shadow = c.transform.trans(152.0, 260.0);
+                        let transform_over = c.transform.trans(148.0, 256.0);
+                        piston_window::text([0.0, 0.0, 0.0, 0.7], 56, over_text, &mut glyphs, transform_over_shadow, g).ok();
+                        piston_window::text([1.0, 0.2, 0.2, 1.0], 56, over_text, &mut glyphs, transform_over, g).unwrap();
+                        // 分数和关卡
+                        let result_text = format!("分数: {}   关卡: {}", game.get_score(), game.get_level());
+                        let transform_result = c.transform.trans(170.0, 320.0);
+                        piston_window::text([1.0, 1.0, 1.0, 1.0], 32, &result_text, &mut glyphs, transform_result, g).unwrap();
+                        // 重开提示
+                        let tip_text = "按R键重新开始";
+                        let transform_tip = c.transform.trans(180.0, 370.0);
+                        piston_window::text([1.0, 1.0, 0.2, 1.0], 24, tip_text, &mut glyphs, transform_tip, g).unwrap();
                     }
                     glyphs.factory.encoder.flush(device);
                 });

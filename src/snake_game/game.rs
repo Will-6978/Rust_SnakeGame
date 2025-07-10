@@ -226,6 +226,11 @@ impl Game {
         &self.obstacles
     }
 
+    /// 判断游戏是否结束
+    pub fn is_game_over(&self) -> bool {
+        self.game_over
+    }
+
     /// 检查当前游戏蛇的生存状态，蛇自身碰撞检测、游戏边界碰撞检测
     fn check_if_snake_alive(&self, dir: Option<Direction>) -> bool {
         let (next_x, next_y) = self.snake.next_head(dir);
