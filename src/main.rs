@@ -18,6 +18,7 @@ const BACK_COLOR: Color = [0.5, 0.5, 0.5, 1.0];
 // 游戏状态枚举
 enum GameState {
     Start,
+    TransitionIn { timer: f64 },
     Playing,
 }
 
@@ -241,17 +242,24 @@ fn main() {
                     let subtitle_y = title_y + 70.0;
                     piston_window::text([0.9, 0.2, 0.2, 0.7], subtitle_size, subtitle, &mut glyphs, c.transform.trans(subtitle_x, subtitle_y), g).ok();
 
-                    // 居中恐怖提示
+                    // 居中恐怖提示（梦核闪光）
                     let tip = "按任意键进入噩梦";
                     let tip_size = 36;
                     let tip_w = tip.chars().count() as f64 * tip_size as f64 * 0.6;
                     let tip_x = (window_width as f64 - tip_w) / 2.0 - 40.0;
                     let tip_y = subtitle_y + 80.0;
+                    let t = bg_time;
+                    let flash_alpha = 0.5 + 0.5 * (t * 2.2).sin().abs(); // 0.5~1.0周期变化
+                    let flash_color = [1.0, 0.2, 0.2, flash_alpha as f32];
+                    let glow_color = [0.9, 0.7, 1.0, (0.3 + 0.5 * flash_alpha) as f32];
                     // 多层阴影
                     for i in 1..4 {
                         piston_window::text([0.0, 0.0, 0.0, 0.18], tip_size, tip, &mut glyphs, c.transform.trans(tip_x + (i as f64), tip_y + (i as f64)), g).ok();
                     }
-                    piston_window::text([1.0, 0.2, 0.2, 1.0], tip_size, tip, &mut glyphs, c.transform.trans(tip_x, tip_y), g).unwrap();
+                    // 发光层
+                    piston_window::text(glow_color, tip_size, tip, &mut glyphs, c.transform.trans(tip_x, tip_y), g).ok();
+                    // 主体闪光
+                    piston_window::text(flash_color, tip_size, tip, &mut glyphs, c.transform.trans(tip_x, tip_y), g).unwrap();
 
                     // 居中底部血池
                     let pool_w = 480.0;
@@ -319,7 +327,49 @@ fn main() {
                     glyphs.factory.encoder.flush(device);
                 });
                 if let Some(Button::Keyboard(_)) = event.press_args() {
-                    state = GameState::Playing;
+                    state = GameState::TransitionIn { timer: 0.0 };
+                }
+            }
+            GameState::TransitionIn { timer } => {
+                // 过渡动画参数
+                let duration = 1.2;
+                let t = timer.min(duration) / duration;
+                // 1. 先画主界面内容（可模糊/缩放/错位）
+                window.draw_2d(&event, |c, g, device| {
+                    let shake = (1.0-t) * 8.0 * (bg_time*7.0).sin();
+                    let scale = 1.0 + (1.0-t) * 0.08 * (bg_time*2.0).sin();
+                    let rot = (1.0-t) * 0.08 * (bg_time*1.3).cos();
+                    let c_game = &c.trans(game_x+shake, game_y-shake).rot_rad(rot).scale(scale, scale);
+                    game.draw(c_game, g, bg_time, &mut glyphs);
+                    // 2. 叠加全屏渐变色块
+                    let fade = t;
+                    let color = [
+                        1.0 * fade as f32 + 0.7 * (1.0-fade) as f32,
+                        0.2 * fade as f32 + 0.0 * (1.0-fade) as f32,
+                        0.3 * fade as f32 + 0.1 * (1.0-fade) as f32,
+                        (0.0 + 0.85 * fade) as f32
+                    ];
+                    rectangle(color, [0.0, 0.0, window_width as f64, window_height as f64], c.transform, g);
+                    // 3. 符号闪现
+                    let symbol_pool = ["?", "!", "鬼", "ERROR", "EXIT", "门", "眼"];
+                    for i in 0..3 {
+                        let idx = ((bg_time*0.7+i as f64*1.3).sin().abs() * (symbol_pool.len() as f64)).floor() as usize % symbol_pool.len();
+                        let ch = symbol_pool[idx];
+                        let sx = (window_width as f64)/2.0 + (i as f64-1.0)*120.0 + (bg_time*1.2+i as f64).sin()*30.0;
+                        let sy = (window_height as f64)/2.0 + (bg_time*1.5+i as f64).cos()*18.0;
+                        let alpha = 0.18 + 0.38*(1.0-t) as f32 * ((bg_time*2.0+i as f64).sin().abs() as f32);
+                        let color = [0.9,0.2,0.8,alpha];
+                        piston_window::text(color, 54, ch, &mut glyphs, c.transform.trans(sx, sy), g).ok();
+                    }
+                });
+                // 4. 动画结束后切换到Playing
+                if let Some(u) = event.update_args() {
+                    let new_timer = timer + u.dt;
+                    if new_timer >= duration {
+                        state = GameState::Playing;
+                    } else {
+                        state = GameState::TransitionIn { timer: new_timer };
+                    }
                 }
             }
             GameState::Playing => {
