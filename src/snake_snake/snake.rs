@@ -5,9 +5,9 @@ use piston_window::{Context, G2d};
 use std::collections::LinkedList;
 
 /// 蛇身体的颜色
-const SNAKE_BODY_COLOR: Color = [0.5, 0.0, 0.0, 1.0];
+const SNAKE_BODY_COLOR: Color = [1.0, 0.7, 0.2, 1.0]; // 橙黄色
 /// 蛇头的颜色
-const SNAKE_HEAD_COLOR: Color = [1.0, 0.00, 0.00, 1.0];
+const SNAKE_HEAD_COLOR: Color = [1.0, 0.2, 0.2, 1.0]; // 亮红色
 
 /// 输入方向限定为 上下左右
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,26 +65,42 @@ impl Snake {
     /// 蛇的绘制
     pub fn draw(&self, con: &Context, g: &mut G2d) {
         let mut is_head = true;
+        let rainbow = [
+            [1.0, 0.2, 0.2, 1.0], // 红
+            [1.0, 0.7, 0.2, 1.0], // 橙
+            [1.0, 1.0, 0.2, 1.0], // 黄
+            [0.2, 1.0, 0.2, 1.0], // 绿
+            [0.2, 0.7, 1.0, 1.0], // 青
+            [0.4, 0.2, 1.0, 1.0], // 蓝
+            [1.0, 0.2, 1.0, 1.0], // 紫
+        ];
+        let mut idx = 0;
         for block in &self.body {
             if is_head {
                 is_head = false;
                 draw_block(
-                    SNAKE_HEAD_COLOR,
+                    [1.0, 0.2, 0.2, 1.0], // 亮红色
                     Shape::Round(10.0, 16),
                     block.x,
                     block.y,
                     con,
                     g,
                 );
+                // 蛇头高光
+                draw_block([1.0, 0.6, 0.6, 0.7], Shape::Round(5.0, 16), block.x, block.y, con, g);
             } else {
+                let color = rainbow[idx % rainbow.len()];
                 draw_block(
-                    SNAKE_BODY_COLOR,
+                    color,
                     Shape::Round(12.5, 16),
                     block.x,
                     block.y,
                     con,
                     g,
                 );
+                // 蛇身高光
+                draw_block([1.0, 1.0, 1.0, 0.3], Shape::Round(6.0, 16), block.x, block.y, con, g);
+                idx += 1;
             }
         }
     }

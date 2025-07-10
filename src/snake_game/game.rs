@@ -6,7 +6,7 @@ use piston_window::{Context, G2d, Key};
 use rand::{thread_rng, Rng};
 
 /// 食物颜色
-const FOOD_COLOR: Color = [255.0, 0.0, 255.0, 1.0];
+const FOOD_COLOR: Color = [0.8, 0.2, 1.0, 1.0]; // 亮紫色
 /// 上边框颜色
 const T_BORDER_COLOR: Color = [0.0000, 0.5, 0.5, 0.6];
 /// 下边框颜色
@@ -121,6 +121,11 @@ impl Game {
     pub fn draw(&self, con: &Context, g: &mut G2d) {
         self.snake.draw(con, g);
         if self.food_exists {
+            // 食物发光外圈
+            use piston_window::ellipse;
+            let fx = (self.food_x as f64) * 20.0;
+            let fy = (self.food_y as f64) * 20.0;
+            ellipse([0.9, 0.5, 1.0, 0.25], [fx-8.0, fy-8.0, 36.0, 36.0], con.transform, g);
             draw_block(
                 FOOD_COLOR,
                 Shape::Round(8.0, 16),
@@ -129,6 +134,8 @@ impl Game {
                 con,
                 g,
             );
+            // 食物高光
+            draw_block([1.0, 0.8, 1.0, 0.7], Shape::Round(4.0, 16), self.food_x, self.food_y, con, g);
         }
         // 绘制障碍物（深灰色）
         let obstacle_color: Color = [0.2, 0.2, 0.2, 1.0];
@@ -229,6 +236,11 @@ impl Game {
     /// 判断游戏是否结束
     pub fn is_game_over(&self) -> bool {
         self.game_over
+    }
+
+    /// 获取蛇头坐标
+    pub fn get_snake_head(&self) -> (i32, i32) {
+        self.snake.head_position()
     }
 
     /// 检查当前游戏蛇的生存状态，蛇自身碰撞检测、游戏边界碰撞检测
