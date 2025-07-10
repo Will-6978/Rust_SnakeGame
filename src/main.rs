@@ -89,6 +89,12 @@ fn main() {
     let mut ghost_deforms: Vec<GhostDeform> = vec![];
     let mut ghost_deform_timer: f64 = 0.0;
 
+    // AI蛇产卵爆炸粒子
+    let mut ai_egg_particles: Vec<(f64, f64, f64, f64, f64)> = Vec::new();
+
+    // 玩家吃到食物时AI蛇产卵的hook
+    let mut last_score = 0;
+
     // 监听窗口输入内容
     while let Some(event) = window.next() {
         match state {
@@ -259,12 +265,29 @@ fn main() {
                         let transform_tip = c.transform.trans(180.0, 370.0);
                         piston_window::text([1.0, 1.0, 0.2, 1.0], 24, tip_text, &mut glyphs, transform_tip, g).unwrap();
                     }
+                    // AI蛇产卵爆炸粒子
+                    ai_egg_particles.iter_mut().for_each(|p| {
+                        p.0 += p.2 * 0.016;
+                        p.1 += p.3 * 0.016;
+                        p.4 -= 0.016;
+                    });
+                    ai_egg_particles.retain(|p| p.4 > 0.0);
+                    for p in &ai_egg_particles {
+                        let color = [0.9, 0.0, 0.0, (p.4 / 0.7).min(1.0) as f32];
+                        piston_window::ellipse(color, [p.0-2.0, p.1-2.0, 4.0, 4.0], c.transform, g);
+                    }
                     glyphs.factory.encoder.flush(device);
                 });
                 // 更新游戏数据
                 event.update(|arg| {
+                    let prev_score = game.get_score();
                     game.update(arg.dt);
                     game.update_ai_snakes();
+                    // 玩家吃到食物时AI蛇产卵
+                    let new_score = game.get_score();
+                    if new_score > prev_score {
+                        game.ai_snake_lay_egg_now(&mut ai_egg_particles);
+                    }
                     // 星空移动和背景时间推进
                     bg_time += arg.dt;
                     for star in &mut stars {

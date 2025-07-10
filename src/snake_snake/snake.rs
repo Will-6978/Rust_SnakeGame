@@ -240,9 +240,20 @@ impl AISnake {
                 );
                 // 恐怖蛇头高光/裂口
                 draw_block([0.9, 0.0, 0.0, 0.7], Shape::Round(4.0, 16), block.x, block.y, con, g);
+                // 血眼
+                use piston_window::ellipse;
+                let cx = (block.x as f64) * 20.0 + 7.0;
+                let cy = (block.y as f64) * 20.0 + 8.0;
+                ellipse([0.8, 0.0, 0.0, 1.0], [cx, cy, 4.0, 4.0], con.transform, g);
+                ellipse([0.8, 0.0, 0.0, 1.0], [cx+6.0, cy, 4.0, 4.0], con.transform, g);
+                // 裂口笑脸
+                use piston_window::line;
+                let mx = (block.x as f64) * 20.0 + 8.0;
+                let my = (block.y as f64) * 20.0 + 16.0;
+                line([0.8, 0.0, 0.0, 1.0], 2.0, [mx, my, mx+8.0, my+2.0], con.transform, g);
             } else {
                 draw_block(
-                    self.color_body,
+                    [0.15, 0.0, 0.0, 1.0], // 更深色
                     Shape::Round(12.5, 16),
                     block.x,
                     block.y,

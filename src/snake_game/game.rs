@@ -122,6 +122,8 @@ impl Game {
             self.food_exists = false;
             self.snake.restore_tail();
             self.score += 1;
+            // 玩家吃到食物时AI蛇产卵
+            // 这里不能直接用self，因为需要传递粒子数组，由主循环调用
         }
     }
 
@@ -313,39 +315,21 @@ impl Game {
     /// 更新AI蛇
     pub fn update_ai_snakes(&mut self) {
         use rand::seq::SliceRandom;
-        // 动态调整AI蛇速度（0.2~0.6，玩家为0.3）
         let mut rng = rand::thread_rng();
         self.ai_snake_speed += rng.gen_range(-0.03..0.03);
         if self.ai_snake_speed < 0.15 { self.ai_snake_speed = 0.15; }
         if self.ai_snake_speed > 0.6 { self.ai_snake_speed = 0.6; }
-        self.ai_snake_timer += 0.016; // 约每帧
+        self.ai_snake_timer += 0.016;
         if self.ai_snake_timer < self.ai_snake_speed { return; }
         self.ai_snake_timer = 0.0;
         for ai in &mut self.ai_snakes {
-            // 追逐最近障碍物
-            let (hx, hy) = ai.head_position();
-            if let Some(&(tx, ty)) = self.obstacles.iter().min_by_key(|&&(x, y)| (x-hx).abs() + (y-hy).abs()) {
-                // 简单贪心：优先横向或纵向靠近
-                let dx = tx - hx;
-                let dy = ty - hy;
-                let dir = if dx.abs() > dy.abs() {
-                    if dx > 0 { Direction::Right } else { Direction::Left }
-                } else if dy != 0 {
-                    if dy > 0 { Direction::Down } else { Direction::Up }
-                } else {
-                    ai.direction // 已到达
-                };
+            // 随机游走
+            if rng.gen_bool(0.1) {
+                let dirs = [Direction::Up, Direction::Down, Direction::Left, Direction::Right];
+                let dir = *dirs.choose(&mut rng).unwrap();
                 ai.move_forward_wrap(Some(dir), self.width, self.height);
             } else {
-                // 无障碍物，随机游走
-                let mut rng = rand::thread_rng();
-                if rng.gen_bool(0.1) {
-                    let dirs = [Direction::Up, Direction::Down, Direction::Left, Direction::Right];
-                    let dir = *dirs.choose(&mut rng).unwrap();
-                    ai.move_forward_wrap(Some(dir), self.width, self.height);
-                } else {
-                    ai.move_forward_wrap(None, self.width, self.height);
-                }
+                ai.move_forward_wrap(None, self.width, self.height);
             }
         }
     }
@@ -362,6 +346,30 @@ impl Game {
                 // 只检测AI蛇头和身体前3节，增加恐怖感
                 if i > 2 { break; }
             }
+        }
+    }
+
+    /// 玩家吃到食物时让所有AI蛇产卵
+    pub fn ai_snake_lay_egg_now(&mut self, particles: &mut Vec<(f64, f64, f64, f64, f64)>) {
+        let mut to_add = vec![];
+        let mut rng = rand::thread_rng();
+        for ai in &mut self.ai_snakes {
+            let (hx, hy) = ai.head_position();
+            // 避免重复产卵
+            if !self.obstacles.contains(&(hx, hy)) {
+                to_add.push((hx, hy));
+                // 爆炸粒子
+                for _ in 0..18 {
+                    let angle = rng.gen_range(0.0..std::f64::consts::PI * 2.0);
+                    let speed = rng.gen_range(40.0..120.0);
+                    let vx = speed * angle.cos();
+                    let vy = speed * angle.sin();
+                    particles.push((hx as f64 * 20.0 + 10.0, hy as f64 * 20.0 + 10.0, vx, vy, 0.7));
+                }
+            }
+        }
+        for (x, y) in to_add {
+            self.obstacles.push((x, y));
         }
     }
 }
