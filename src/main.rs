@@ -80,6 +80,13 @@ fn main() {
                     let transform_score_shadow = c.transform.trans(484.0, 44.0);
                     piston_window::text([0.0, 0.0, 0.0, 0.5], 28, &score_text, &mut glyphs, transform_score_shadow, g).ok();
                     piston_window::text([1.0, 1.0, 1.0, 1.0], 28, &score_text, &mut glyphs, transform_score, g).unwrap();
+                    // 在每个障碍物上绘制红色“鬼”字
+                    for &(ox, oy) in game.get_obstacles() {
+                        let x = (ox as f64) * 20.0 + 2.0;
+                        let y = (oy as f64) * 20.0 + 18.0;
+                        let transform_ghost = c.transform.trans(x, y);
+                        piston_window::text([1.0, 0.0, 0.0, 1.0], 16, "鬼", &mut glyphs, transform_ghost, g).ok();
+                    }
                     glyphs.factory.encoder.flush(device);
                 });
                 // 更新游戏数据

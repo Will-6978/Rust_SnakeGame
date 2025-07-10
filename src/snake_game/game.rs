@@ -45,12 +45,16 @@ pub struct Game {
     game_pause: bool,
     /// 当前分数
     score: u32,
+    /// 当前关卡
+    level: u32,
+    /// 障碍物位置
+    obstacles: Vec<(i32, i32)>,
 }
 
 impl Game {
     /// 初始化游戏数据
     pub fn new(width: i32, height: i32) -> Game {
-        Game {
+        let mut game = Game {
             snake: Snake::new(2, 2),
             food_exists: true,
             food_x: 6,
@@ -61,7 +65,11 @@ impl Game {
             waiting_time: 0.0,
             game_pause: false,
             score: 0,
-        }
+            level: 1,
+            obstacles: Vec::new(),
+        };
+        game.generate_obstacles();
+        game
     }
 
     /// 对外暴露的控制方法
@@ -122,7 +130,11 @@ impl Game {
                 g,
             );
         }
-
+        // 绘制障碍物（深灰色）
+        let obstacle_color: Color = [0.2, 0.2, 0.2, 1.0];
+        for &(ox, oy) in &self.obstacles {
+            draw_block(obstacle_color, Shape::Square, ox, oy, con, g);
+        }
         //上边框
         draw_rectangle(T_BORDER_COLOR, 0, 0, self.width, 1, con, g);
         // 下边框
@@ -181,11 +193,49 @@ impl Game {
         self.food_exists = true;
     }
 
+    /// 生成障碍物，数量=level*3，不能与蛇、食物重叠
+    fn generate_obstacles(&mut self) {
+        use rand::seq::SliceRandom;
+        let mut rng = thread_rng();
+        let mut positions = Vec::new();
+        for x in 1..self.width-1 {
+            for y in 1..self.height-1 {
+                // 不与蛇初始位置、食物重叠
+                if (x, y) == (2, 2) || (x, y) == (self.food_x, self.food_y) || self.snake.over_tail(x, y) {
+                    continue;
+                }
+                positions.push((x, y));
+            }
+        }
+        positions.shuffle(&mut rng);
+        let count = (self.level * 3) as usize;
+        self.obstacles = positions.into_iter().take(count).collect();
+    }
+
+    /// 进入下一关，升级并生成新障碍物
+    pub fn next_level(&mut self) {
+        self.level += 1;
+        self.generate_obstacles();
+    }
+    /// 获取当前关卡
+    pub fn get_level(&self) -> u32 {
+        self.level
+    }
+    /// 获取障碍物位置
+    pub fn get_obstacles(&self) -> &Vec<(i32, i32)> {
+        &self.obstacles
+    }
+
     /// 检查当前游戏蛇的生存状态，蛇自身碰撞检测、游戏边界碰撞检测
     fn check_if_snake_alive(&self, dir: Option<Direction>) -> bool {
         let (next_x, next_y) = self.snake.next_head(dir);
 
         if self.snake.over_tail(next_x, next_y) {
+            return false;
+        }
+
+        // 蛇头碰到障碍物判定死亡
+        if self.obstacles.iter().any(|&(ox, oy)| ox == next_x && oy == next_y) {
             return false;
         }
 
