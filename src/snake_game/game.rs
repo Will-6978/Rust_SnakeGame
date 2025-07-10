@@ -45,8 +45,9 @@ pub struct Game {
     game_pause: bool,
     /// 当前分数
     score: u32,
-    /// 当前关卡
-    level: u32,
+    pub level: u32,
+    pub level_score: u32,
+    pub waiting_next_level: bool,
     /// 障碍物位置
     obstacles: Vec<(i32, i32)>,
     /// AI蛇列表
@@ -57,6 +58,7 @@ pub struct Game {
 }
 
 impl Game {
+    pub const LEVEL_GOAL: u32 = 5;
     /// 初始化游戏数据
     pub fn new(width: i32, height: i32) -> Game {
         let mut game = Game {
@@ -71,6 +73,8 @@ impl Game {
             game_pause: false,
             score: 0,
             level: 1,
+            level_score: 0,
+            waiting_next_level: false,
             obstacles: Vec::new(),
             ai_snakes: vec![AISnake::new(width-5, height-5)],
             ai_snake_timer: 0.0,
@@ -122,8 +126,13 @@ impl Game {
             self.food_exists = false;
             self.snake.restore_tail();
             self.score += 1;
+            self.level_score += 1;
             // 玩家吃到食物时AI蛇产卵
             // 这里不能直接用self，因为需要传递粒子数组，由主循环调用
+            // 关卡过关检测
+            if self.level_score >= Self::LEVEL_GOAL {
+                self.waiting_next_level = true;
+            }
         }
     }
 
@@ -222,7 +231,7 @@ impl Game {
         self.food_exists = true;
     }
 
-    /// 生成障碍物，数量=level*3，不能与蛇、食物重叠
+    /// 生成障碍物，数量=10*level，不能与蛇、食物重叠
     fn generate_obstacles(&mut self) {
         use rand::seq::SliceRandom;
         let mut rng = thread_rng();
@@ -237,14 +246,24 @@ impl Game {
             }
         }
         positions.shuffle(&mut rng);
-        let count = (self.level * 3) as usize;
+        let count = (self.level * 10) as usize;
         self.obstacles = positions.into_iter().take(count).collect();
     }
 
-    /// 进入下一关，升级并生成新障碍物
+    /// 进入下一关，速度翻倍，关卡+1，分数清零，障碍物累积
     pub fn next_level(&mut self) {
         self.level += 1;
-        self.generate_obstacles();
+        self.level_score = 0;
+        self.waiting_next_level = false;
+        // 玩家和AI蛇长度恢复初始
+        self.snake = Snake::new(2, 2);
+        for ai in &mut self.ai_snakes {
+            *ai = AISnake::new(self.width-5, self.height-5);
+        }
+        // 速度翻倍（有上限）
+        self.ai_snake_speed = (self.ai_snake_speed / 2.0).max(0.04);
+        // AI蛇速度范围增加（最大值翻倍，最小值减半）
+        // 这里需要主循环配合修改全局MOVING_PERIOD
     }
     /// 获取当前关卡
     pub fn get_level(&self) -> u32 {
@@ -296,15 +315,24 @@ impl Game {
     }
 
     /// 重置游戏
-    fn restart(&mut self) {
+    pub fn restart(&mut self) {
         self.snake = Snake::new(2, 2);
-        self.waiting_time = 0.0;
         self.food_exists = true;
         self.food_x = 6;
         self.food_y = 4;
         self.game_over = false;
+        self.waiting_time = 0.0;
         self.game_pause = false;
         self.score = 0;
+        self.level = 1;
+        self.level_score = 0;
+        self.waiting_next_level = false;
+        self.obstacles.clear();
+        self.generate_obstacles();
+        self.ai_snakes.clear();
+        self.ai_snakes.push(AISnake::new(self.width-5, self.height-5));
+        self.ai_snake_timer = 0.0;
+        self.ai_snake_speed = 0.18;
     }
 
     /// 获取当前分数
@@ -313,13 +341,13 @@ impl Game {
     }
 
     /// 更新AI蛇
-    pub fn update_ai_snakes(&mut self) {
+    pub fn update_ai_snakes(&mut self, ai_snake_speed_min: f64, ai_snake_speed_max: f64) {
         if self.game_pause { return; }
         use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
         self.ai_snake_speed += rng.gen_range(-0.02..0.02);
-        if self.ai_snake_speed < 0.10 { self.ai_snake_speed = 0.10; }
-        if self.ai_snake_speed > 0.36 { self.ai_snake_speed = 0.36; }
+        if self.ai_snake_speed < ai_snake_speed_min { self.ai_snake_speed = ai_snake_speed_min; }
+        if self.ai_snake_speed > ai_snake_speed_max { self.ai_snake_speed = ai_snake_speed_max; }
         self.ai_snake_timer += 0.016;
         if self.ai_snake_timer < self.ai_snake_speed { return; }
         self.ai_snake_timer = 0.0;
@@ -367,9 +395,7 @@ impl Game {
                     particles.push((hx as f64 * 20.0 + 10.0, hy as f64 * 20.0 + 10.0, vx, vy, 0.7));
                 }
             }
-            // AI蛇变长2节
-            ai.restore_tail();
-            ai.restore_tail();
+            // 不再变长
         }
         for (x, y) in to_add {
             self.obstacles.push((x, y));

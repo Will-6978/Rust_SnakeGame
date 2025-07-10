@@ -264,7 +264,8 @@ impl AISnake {
         }
     }
     pub fn restore_tail(&mut self) {
-        if let Some(blk) = self.tail.clone() {
+        let last = self.body.back().cloned();
+        if let Some(blk) = last {
             self.body.push_back(blk);
         }
     }

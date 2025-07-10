@@ -95,6 +95,12 @@ fn main() {
     // 玩家吃到食物时AI蛇产卵的hook
     let mut last_score = 0;
 
+    // 玩家速度控制变量
+    let mut moving_period: f64 = 0.18;
+    let mut ai_snake_speed_min: f64 = moving_period / 2.0;
+    let mut ai_snake_speed_max: f64 = moving_period / 2.0;
+    const INIT_MOVING_PERIOD: f64 = 0.18;
+
     // 监听窗口输入内容
     while let Some(event) = window.next() {
         match state {
@@ -141,23 +147,72 @@ fn main() {
                 });
             }
             GameState::Playing => {
+                // 关卡切换界面
+                if game.waiting_next_level {
+                    window.draw_2d(&event, |c, g, device| {
+                        // 恐怖背景（递增）
+                        let t = (bg_time * 0.1).sin() * 0.5 + 0.5;
+                        let level = game.level;
+                        let base = 0.2 + 0.1 * (level as f32).min(5.0);
+                        let red = base + 0.2 * t as f32 + 0.08 * (level as f32);
+                        let green = base * (1.0 - 0.08 * (level as f32));
+                        let blue = base * (1.0 - 0.12 * (level as f32));
+                        use piston_window::rectangle;
+                        for i in 0..30 {
+                            let k = i as f32 / 29.0;
+                            let color = [
+                                red * (1.0 - k) + blue * k,
+                                green * (1.0 - k) + red * k,
+                                blue * (1.0 - k) + red * k,
+                                1.0,
+                            ];
+                            rectangle(color, [0.0, i as f64 * 20.0, 600.0, 20.0], c.transform, g);
+                        }
+                        // 恐怖关卡切换界面
+                        let over_text = format!("第{}关完成", game.level);
+                        let tip_text = "按任意键进入下一关";
+                        let transform_over = c.transform.trans(148.0, 256.0);
+                        let transform_tip = c.transform.trans(180.0, 320.0);
+                        piston_window::text([1.0, 0.2, 0.2, 1.0], 56, &over_text, &mut glyphs, transform_over, g).unwrap();
+                        piston_window::text([1.0, 1.0, 0.2, 1.0], 28, tip_text, &mut glyphs, transform_tip, g).unwrap();
+                        glyphs.factory.encoder.flush(device);
+                    });
+                    // 按任意键进入下一关
+                    if let Some(Button::Keyboard(_)) = event.press_args() {
+                        game.next_level();
+                        // 只有进入下一关时速度才乘2
+                        moving_period = (moving_period / 2.0).max(0.04);
+                        ai_snake_speed_min = moving_period / 2.0;
+                        ai_snake_speed_max = moving_period / 2.0;
+                    }
+                    continue;
+                }
                 // 监听用户输入
                 if let Some(Button::Keyboard(key)) = event.press_args() {
+                    if key == piston_window::Key::R {
+                        game.restart();
+                        moving_period = INIT_MOVING_PERIOD;
+                        ai_snake_speed_min = moving_period / 2.0;
+                        ai_snake_speed_max = moving_period / 2.0;
+                    }
                     game.key_pressed(key);
                 }
                 // 清理当前窗口内容，并重新绘制游戏内容
                 window.draw_2d(&event, |c, g, device| {
-                    // 动态渐变背景
+                    // 恐怖背景（递增）
                     let t = (bg_time * 0.1).sin() * 0.5 + 0.5;
-                    let color1 = [0.2 + 0.3 * t as f32, 0.3 + 0.4 * t as f32, 0.5 + 0.3 * t as f32, 1.0];
-                    let color2 = [0.1 + 0.2 * (1.0 - t as f32), 0.2 + 0.3 * (1.0 - t as f32), 0.4 + 0.4 * (1.0 - t as f32), 1.0];
+                    let level = game.level;
+                    let base = 0.2 + 0.1 * (level as f32).min(5.0);
+                    let red = base + 0.2 * t as f32 + 0.08 * (level as f32);
+                    let green = base * (1.0 - 0.08 * (level as f32));
+                    let blue = base * (1.0 - 0.12 * (level as f32));
                     use piston_window::{rectangle, ellipse};
                     for i in 0..30 {
                         let k = i as f32 / 29.0;
                         let color = [
-                            color1[0] * (1.0 - k) + color2[0] * k,
-                            color1[1] * (1.0 - k) + color2[1] * k,
-                            color1[2] * (1.0 - k) + color2[2] * k,
+                            red * (1.0 - k) + blue * k,
+                            green * (1.0 - k) + red * k,
+                            blue * (1.0 - k) + red * k,
                             1.0,
                         ];
                         rectangle(color, [0.0, i as f64 * 20.0, 600.0, 20.0], c.transform, g);
@@ -276,13 +331,17 @@ fn main() {
                         let color = [0.9, 0.0, 0.0, (p.4 / 0.7).min(1.0) as f32];
                         piston_window::ellipse(color, [p.0-2.0, p.1-2.0, 4.0, 4.0], c.transform, g);
                     }
+                    // 顶端显示关卡目标分数
+                    let goal_text = format!("第{}关 目标分数：{}/{}", game.level, game.level_score, snake_game::game::Game::LEVEL_GOAL);
+                    let transform_goal = c.transform.trans(160.0, 32.0);
+                    piston_window::text([1.0, 0.8, 0.2, 1.0], 28, &goal_text, &mut glyphs, transform_goal, g).unwrap();
                     glyphs.factory.encoder.flush(device);
                 });
                 // 更新游戏数据
                 event.update(|arg| {
                     let prev_score = game.get_score();
                     game.update(arg.dt);
-                    game.update_ai_snakes();
+                    game.update_ai_snakes(ai_snake_speed_min, ai_snake_speed_max);
                     // 玩家吃到食物时AI蛇产卵
                     let new_score = game.get_score();
                     if new_score > prev_score {
@@ -355,6 +414,12 @@ fn main() {
                                 deform.tear = rng.gen_bool(0.18);
                             }
                         }
+                    }
+                    // 死亡后重置速度
+                    if game.is_game_over() {
+                        moving_period = INIT_MOVING_PERIOD;
+                        ai_snake_speed_min = moving_period / 2.0;
+                        ai_snake_speed_max = moving_period / 2.0;
                     }
                 });
             }
