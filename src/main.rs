@@ -105,46 +105,60 @@ fn main() {
     while let Some(event) = window.next() {
         match state {
             GameState::Start => {
-                // 任意按键进入游戏
-                if let Some(Button::Keyboard(_)) = event.press_args() {
-                    state = GameState::Playing;
-                }
+                // 恐怖风格开始界面
                 window.draw_2d(&event, |c, g, device| {
-                    // 动态渐变背景
+                    // 血色渐变背景
                     let t = (bg_time * 0.1).sin() * 0.5 + 0.5;
-                    let color1 = [0.2 + 0.3 * t as f32, 0.3 + 0.4 * t as f32, 0.5 + 0.3 * t as f32, 1.0];
-                    let color2 = [0.1 + 0.2 * (1.0 - t as f32), 0.2 + 0.3 * (1.0 - t as f32), 0.4 + 0.4 * (1.0 - t as f32), 1.0];
-                    use piston_window::rectangle;
+                    let base = 0.15;
+                    let red = base + 0.5 * t as f32;
+                    let green = base * (1.0 - 0.2 * t as f32);
+                    let blue = base * (1.0 - 0.4 * t as f32);
+                    use piston_window::{rectangle, ellipse};
                     for i in 0..30 {
                         let k = i as f32 / 29.0;
                         let color = [
-                            color1[0] * (1.0 - k) + color2[0] * k,
-                            color1[1] * (1.0 - k) + color2[1] * k,
-                            color1[2] * (1.0 - k) + color2[2] * k,
+                            red * (1.0 - k) + blue * k,
+                            green * (1.0 - k) + red * k,
+                            blue * (1.0 - k) + red * k,
                             1.0,
                         ];
                         rectangle(color, [0.0, i as f64 * 20.0, 600.0, 20.0], c.transform, g);
                     }
-                    // 星空特效
-                    for star in &stars {
-                        let star_color = [0.7, 0.85, 1.0, 0.8];
-                        piston_window::ellipse(star_color, [star.x, star.y, star.size, star.size], c.transform, g);
+                    // 随机血色粒子
+                    let mut rng = rand::thread_rng();
+                    for _ in 0..12 {
+                        if rng.gen_bool(0.08) {
+                            let x = rng.gen_range(40.0..560.0);
+                            let y = rng.gen_range(80.0..520.0);
+                            let r = rng.gen_range(8.0..22.0);
+                            ellipse([0.7, 0.0, 0.0, 0.18], [x, y, r, r], c.transform, g);
+                        }
                     }
-                    // 居中显示标题和提示（加大字号、加阴影、颜色更鲜明）
+                    // 偶尔闪现血手印/鬼字
+                    if (bg_time * 1.7).sin() > 0.8 {
+                        let transform_ghost = c.transform.trans(320.0, 180.0).rot_rad(0.2).scale(2.5, 2.5);
+                        piston_window::text([0.9, 0.0, 0.0, 0.25], 32, "鬼", &mut glyphs, transform_ghost, g).ok();
+                    }
+                    if (bg_time * 1.3).cos() > 0.85 {
+                        let transform_blood = c.transform.trans(120.0, 400.0).rot_rad(-0.3).scale(2.0, 2.0);
+                        piston_window::text([0.8, 0.0, 0.0, 0.18], 32, "血", &mut glyphs, transform_blood, g).ok();
+                    }
+                    // 血红大字标题
                     let title = "贪吃蛇";
-                    let tip = "按任意键开始";
-                    let transform_title = c.transform.trans(110.0, 200.0);
                     let transform_title_shadow = c.transform.trans(114.0, 204.0);
-                    let transform_tip = c.transform.trans(100.0, 270.0);
-                    let transform_tip_shadow = c.transform.trans(104.0, 274.0);
-                    // 阴影
-                    piston_window::text([0.0, 0.0, 0.0, 0.5], 64, title, &mut glyphs, transform_title_shadow, g).ok();
-                    piston_window::text([0.0, 0.0, 0.0, 0.5], 32, tip, &mut glyphs, transform_tip_shadow, g).ok();
-                    // 主体
-                    piston_window::text([0.2, 0.8, 0.2, 1.0], 64, title, &mut glyphs, transform_title, g).unwrap();
-                    piston_window::text([1.0, 0.8, 0.2, 1.0], 32, tip, &mut glyphs, transform_tip, g).unwrap();
-                    let _ = glyphs.factory.encoder.flush(device);
+                    let transform_title = c.transform.trans(110.0, 200.0);
+                    piston_window::text([0.0, 0.0, 0.0, 0.7], 72, title, &mut glyphs, transform_title_shadow, g).ok();
+                    piston_window::text([0.9, 0.0, 0.0, 1.0], 72, title, &mut glyphs, transform_title, g).unwrap();
+                    // 暗红提示
+                    let tip = "按任意键开始";
+                    let transform_tip = c.transform.trans(180.0, 320.0);
+                    piston_window::text([0.7, 0.0, 0.0, 0.8], 32, tip, &mut glyphs, transform_tip, g).unwrap();
+                    glyphs.factory.encoder.flush(device);
                 });
+                // 任意按键进入游戏
+                if let Some(Button::Keyboard(_)) = event.press_args() {
+                    state = GameState::Playing;
+                }
             }
             GameState::Playing => {
                 // 关卡切换界面
@@ -217,41 +231,25 @@ fn main() {
                         ];
                         rectangle(color, [0.0, i as f64 * 20.0, 600.0, 20.0], c.transform, g);
                     }
+                    // 游戏区血色发光边框
+                    let border_glow = [0.8, 0.0, 0.0, 0.18];
+                    rectangle(border_glow, [-12.0, -12.0, 624.0, 24.0], c.transform, g); // 上
+                    rectangle(border_glow, [-12.0, -12.0, 24.0, 624.0], c.transform, g); // 左
+                    rectangle(border_glow, [-12.0, 588.0, 624.0, 24.0], c.transform, g); // 下
+                    rectangle(border_glow, [588.0, -12.0, 24.0, 624.0], c.transform, g); // 右
+                    // 游戏区立体边框
+                    let border_light = [0.9, 0.9, 0.9, 1.0];
+                    let border_dark = [0.2, 0.0, 0.0, 1.0];
+                    rectangle(border_light, [0.0, 0.0, 600.0, 8.0], c.transform, g); // 上
+                    rectangle(border_light, [0.0, 0.0, 8.0, 600.0], c.transform, g); // 左
+                    rectangle(border_dark, [0.0, 592.0, 600.0, 8.0], c.transform, g); // 下
+                    rectangle(border_dark, [592.0, 0.0, 8.0, 600.0], c.transform, g); // 右
                     // 星空特效
                     for star in &stars {
                         let star_color = [0.7, 0.85, 1.0, 0.8];
                         ellipse(star_color, [star.x, star.y, star.size, star.size], c.transform, g);
                     }
-                    // 游戏区立体边框
-                    // 上、左为浅色，下、右为深色
-                    let border_light = [0.9, 0.9, 0.9, 1.0];
-                    let border_dark = [0.2, 0.2, 0.2, 1.0];
-                    // 上边框
-                    rectangle(border_light, [0.0, 0.0, 600.0, 8.0], c.transform, g);
-                    // 左边框
-                    rectangle(border_light, [0.0, 0.0, 8.0, 600.0], c.transform, g);
-                    // 下边框
-                    rectangle(border_dark, [0.0, 592.0, 600.0, 8.0], c.transform, g);
-                    // 右边框
-                    rectangle(border_dark, [592.0, 0.0, 8.0, 600.0], c.transform, g);
-                    // 发光边框
-                    let glow = [0.5, 0.7, 1.0, 0.18];
-                    rectangle(glow, [-8.0, -8.0, 616.0, 16.0], c.transform, g); // 上
-                    rectangle(glow, [-8.0, -8.0, 16.0, 616.0], c.transform, g); // 左
-                    rectangle(glow, [-8.0, 592.0, 616.0, 16.0], c.transform, g); // 下
-                    rectangle(glow, [592.0, -8.0, 16.0, 616.0], c.transform, g); // 右
                     game.draw(&c, g);
-                    // 右上角显示分数和关卡（美化）
-                    let score_text = format!("分数: {}", game.get_score());
-                    let level_text = format!("关卡: {}", game.get_level());
-                    let transform_score_shadow = c.transform.trans(484.0, 44.0);
-                    let transform_score = c.transform.trans(480.0, 40.0);
-                    let transform_level_shadow = c.transform.trans(484.0, 74.0);
-                    let transform_level = c.transform.trans(480.0, 70.0);
-                    piston_window::text([0.0, 0.0, 0.0, 0.5], 28, &score_text, &mut glyphs, transform_score_shadow, g).ok();
-                    piston_window::text([1.0, 1.0, 0.2, 1.0], 28, &score_text, &mut glyphs, transform_score, g).unwrap();
-                    piston_window::text([0.0, 0.0, 0.0, 0.5], 24, &level_text, &mut glyphs, transform_level_shadow, g).ok();
-                    piston_window::text([0.2, 0.8, 1.0, 1.0], 24, &level_text, &mut glyphs, transform_level, g).unwrap();
                     // 在每个障碍物上绘制呼吸光效和红色“鬼”字（带变形）
                     let breath = ((bg_time * 2.0).sin() * 0.5 + 0.5) as f32; // 0~1
                     let obs = game.get_obstacles();
@@ -331,10 +329,23 @@ fn main() {
                         let color = [0.9, 0.0, 0.0, (p.4 / 0.7).min(1.0) as f32];
                         piston_window::ellipse(color, [p.0-2.0, p.1-2.0, 4.0, 4.0], c.transform, g);
                     }
-                    // 顶端显示关卡目标分数
-                    let goal_text = format!("第{}关 目标分数：{}/{}", game.level, game.level_score, snake_game::game::Game::LEVEL_GOAL);
-                    let transform_goal = c.transform.trans(160.0, 32.0);
-                    piston_window::text([1.0, 0.8, 0.2, 1.0], 28, &goal_text, &mut glyphs, transform_goal, g).unwrap();
+                    // 顶部UI：关卡/分数/目标
+                    let goal_text = format!("第{}关 目标分数：{}/{}  总分：{}", game.level, game.level_score, snake_game::game::Game::LEVEL_GOAL, game.get_score());
+                    let transform_goal = c.transform.trans(60.0, 32.0);
+                    piston_window::text([0.9, 0.0, 0.0, 1.0], 28, &goal_text, &mut glyphs, transform_goal, g).unwrap();
+                    // 底部UI：操作提示
+                    let tip_text = "P暂停  R重开  方向键移动";
+                    let transform_tip = c.transform.trans(180.0, 590.0);
+                    piston_window::text([0.7, 0.0, 0.0, 0.8], 20, tip_text, &mut glyphs, transform_tip, g).unwrap();
+                    // 侧边偶尔闪现恐怖符号
+                    if (bg_time * 1.5).sin() > 0.92 {
+                        let transform_side = c.transform.trans(20.0, 300.0).rot_rad(-0.4).scale(1.8, 1.8);
+                        piston_window::text([0.8, 0.0, 0.0, 0.18], 32, "手", &mut glyphs, transform_side, g).ok();
+                    }
+                    if (bg_time * 1.2).cos() > 0.93 {
+                        let transform_side = c.transform.trans(560.0, 500.0).rot_rad(0.3).scale(1.5, 1.5);
+                        piston_window::text([0.9, 0.0, 0.0, 0.13], 32, "鬼", &mut glyphs, transform_side, g).ok();
+                    }
                     glyphs.factory.encoder.flush(device);
                 });
                 // 更新游戏数据
