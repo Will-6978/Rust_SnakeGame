@@ -46,6 +46,33 @@ struct GhostDeform {
     tear: bool,
 }
 
+// 在main函数顶部添加符号和雾气结构体
+#[derive(Clone)]
+struct FloatingSymbol {
+    ch: &'static str,
+    x: f64,
+    y: f64,
+    speed: f64,
+    angle: f64,
+    scale: f64,
+    alpha: f32,
+    angle_speed: f64,
+    scale_speed: f64,
+}
+
+#[derive(Clone)]
+struct BloodMist {
+    x: f64,
+    y: f64,
+    rx: f64,
+    ry: f64,
+    dx: f64,
+    dy: f64,
+    drx: f64,
+    dry: f64,
+    alpha: f32,
+}
+
 fn main() {
     // 游戏区大小
     let (game_width, game_height) = (30, 30); // 600x600
@@ -86,6 +113,20 @@ fn main() {
         .collect();
     let mut bg_time: f64 = 0.0;
 
+    // ====== 漂浮恐怖符号初始化 ======
+    let mut floating_symbols: Vec<FloatingSymbol> = vec![
+        FloatingSymbol { ch: "鬼", x: 120.0, y: 180.0, speed: 8.0, angle: 0.0, scale: 1.2, alpha: 0.32, angle_speed: 0.18, scale_speed: 0.07 },
+        FloatingSymbol { ch: "卍", x: 540.0, y: 320.0, speed: 10.0, angle: 0.0, scale: 1.0, alpha: 0.22, angle_speed: -0.13, scale_speed: 0.09 },
+        FloatingSymbol { ch: "手", x: 200.0, y: 500.0, speed: 7.0, angle: 0.0, scale: 1.3, alpha: 0.18, angle_speed: 0.22, scale_speed: -0.06 },
+        FloatingSymbol { ch: "鬼", x: 400.0, y: 600.0, speed: 9.0, angle: 0.0, scale: 0.9, alpha: 0.28, angle_speed: 0.15, scale_speed: 0.05 },
+    ];
+    // ====== 血色雾气初始化 ======
+    let mut blood_mists: Vec<BloodMist> = vec![
+        BloodMist { x: 180.0, y: 320.0, rx: 90.0, ry: 38.0, dx: 0.12, dy: 0.08, drx: 0.04, dry: 0.03, alpha: 0.13 },
+        BloodMist { x: 500.0, y: 180.0, rx: 60.0, ry: 28.0, dx: -0.09, dy: 0.11, drx: -0.03, dry: 0.02, alpha: 0.10 },
+        BloodMist { x: 350.0, y: 520.0, rx: 70.0, ry: 32.0, dx: 0.07, dy: -0.10, drx: 0.02, dry: -0.04, alpha: 0.09 },
+    ];
+
     // 粒子特效相关
     let mut particles: Vec<Particle> = Vec::new();
     let mut flash_timer: f64 = 0.0;
@@ -122,19 +163,47 @@ fn main() {
                     ];
                     rectangle(bg_color, [0.0, 0.0, window_width as f64, window_height as f64], c.transform, g);
 
-                    // 居中大标题（血色渐变、滴血阴影）
+                    // ====== 全屏周期性闪光/闪烁 ======
+                    let flash_period = 2.0;
+                    let flash_phase = (bg_time % flash_period) / flash_period;
+                    let flash_alpha = if flash_phase < 0.12 {
+                        // 前12%时间闪光，alpha随sin变化
+                        ((0.12 - flash_phase) / 0.12 * std::f64::consts::PI).sin().abs() as f32 * 0.55
+                    } else { 0.0 };
+                    if flash_alpha > 0.01 {
+                        // 血色或白色闪光
+                        let color = if flash_phase < 0.06 {
+                            [1.0, 1.0, 1.0, flash_alpha]
+                        } else {
+                            [0.9, 0.1, 0.1, flash_alpha * 0.8]
+                        };
+                        rectangle(color, [0.0, 0.0, window_width as f64, window_height as f64], c.transform, g);
+                    }
+
+                    // ====== 主标题动态抖动/颜色突变 ======
                     let title = "梦魇贪吃蛇";
                     let title_size = 88;
                     let title_w = title.chars().count() as f64 * title_size as f64 * 0.9;
-                    let title_x = (window_width as f64 - title_w) / 2.0 - 70.0;
-                    let title_y = 220.0;
+                    // 抖动参数
+                    let shake_x = (bg_time * 2.1).sin() * 8.0 + (bg_time * 1.3).cos() * 4.0;
+                    let shake_y = (bg_time * 1.7).cos() * 6.0 + (bg_time * 2.7).sin() * 3.0;
+                    let scale = 1.0 + (bg_time * 0.9).sin() * 0.03;
+                    // 颜色突变
+                    let color_flash = ((bg_time * 0.7).sin().abs() > 0.98) as u8;
+                    let title_color = if color_flash == 1 {
+                        [1.0, 1.0, 1.0, 1.0]
+                    } else {
+                        [0.95, 0.0, 0.0, 1.0]
+                    };
+                    let title_x = (window_width as f64 - title_w * scale) / 2.0 - 70.0 + shake_x;
+                    let title_y = 220.0 + shake_y;
                     // 渐变阴影
                     for i in 1..6 {
                         let alpha = 0.18 - 0.03 * (i as f32);
-                        piston_window::text([0.7, 0.0, 0.0, alpha], title_size, title, &mut glyphs, c.transform.trans(title_x + (i as f64), title_y + (i as f64)), g).ok();
+                        piston_window::text([0.7, 0.0, 0.0, alpha], title_size, title, &mut glyphs, c.transform.trans(title_x + (i as f64), title_y + (i as f64)).scale(scale, scale), g).ok();
                     }
                     // 主标题
-                    piston_window::text([0.95, 0.0, 0.0, 1.0], title_size, title, &mut glyphs, c.transform.trans(title_x, title_y), g).unwrap();
+                    piston_window::text(title_color, title_size, title, &mut glyphs, c.transform.trans(title_x, title_y).scale(scale, scale), g).unwrap();
 
                     // 居中副标题
                     let subtitle = "DREAM HORROR SNAKE";
@@ -172,6 +241,53 @@ fn main() {
                     let side_y = window_height as f64 / 2.0 + 60.0;
                     piston_window::text([0.8, 0.0, 0.0, 0.4], 48, "卍", &mut glyphs, c.transform.trans(40.0, side_y), g).ok();
                     piston_window::text([0.8, 0.0, 0.0, 0.4], 48, "鬼", &mut glyphs, c.transform.trans(window_width as f64 - 80.0, side_y), g).ok();
+
+                    // ====== 漂浮恐怖符号动态更新与绘制 ======
+                    for sym in &mut floating_symbols {
+                        sym.y += sym.speed * 0.016;
+                        sym.angle += sym.angle_speed * 0.016;
+                        sym.scale += sym.scale_speed * 0.016;
+                        if sym.y > window_height as f64 + 60.0 {
+                            sym.y = -60.0;
+                        }
+                        if sym.scale < 0.8 { sym.scale = 1.2; }
+                        if sym.scale > 1.4 { sym.scale = 1.0; }
+                        let color = [0.8, 0.0, 0.0, sym.alpha];
+                        let transform = c.transform.trans(sym.x, sym.y).rot_rad(sym.angle).scale(sym.scale, sym.scale);
+                        piston_window::text(color, 48, sym.ch, &mut glyphs, transform, g).ok();
+                    }
+
+                    // ====== 血色雾气动态更新与绘制 ======
+                    use piston_window::ellipse;
+                    for mist in &mut blood_mists {
+                        mist.x += mist.dx;
+                        mist.y += mist.dy;
+                        mist.rx += mist.drx;
+                        mist.ry += mist.dry;
+                        if mist.x < 0.0 || mist.x > window_width as f64 { mist.dx = -mist.dx; }
+                        if mist.y < 0.0 || mist.y > window_height as f64 { mist.dy = -mist.dy; }
+                        if mist.rx < 40.0 || mist.rx > 120.0 { mist.drx = -mist.drx; }
+                        if mist.ry < 18.0 || mist.ry > 60.0 { mist.dry = -mist.dry; }
+                        let color = [0.8, 0.1, 0.1, mist.alpha];
+                        ellipse(color, [mist.x - mist.rx/2.0, mist.y - mist.ry/2.0, mist.rx, mist.ry], c.transform, g);
+                    }
+
+                    // ====== 屏幕边缘黑雾/红雾 ======
+                    // 多层半透明渐变矩形/椭圆覆盖屏幕边缘
+                    let edge_layers = 5;
+                    for i in 0..edge_layers {
+                        let k = i as f32 / (edge_layers as f32);
+                        let alpha = 0.18 * (1.0 - k).powf(1.5) + 0.09 * (bg_time * (1.2 + k as f64)).sin().abs() as f32;
+                        let color = [0.08 + 0.3 * k, 0.0, 0.0, alpha];
+                        // 上
+                        rectangle(color, [0.0, 0.0, window_width as f64, 32.0 + 24.0 * (k as f64)], c.transform, g);
+                        // 下
+                        rectangle(color, [0.0, window_height as f64 - (32.0 + 24.0 * (k as f64)), window_width as f64, 32.0 + 24.0 * (k as f64)], c.transform, g);
+                        // 左
+                        rectangle(color, [0.0, 0.0, 32.0 + 24.0 * (k as f64), window_height as f64], c.transform, g);
+                        // 右
+                        rectangle(color, [window_width as f64 - (32.0 + 24.0 * (k as f64)), 0.0, 32.0 + 24.0 * (k as f64), window_height as f64], c.transform, g);
+                    }
 
                     glyphs.factory.encoder.flush(device);
                 });
@@ -220,17 +336,17 @@ fn main() {
                     }
                     continue;
                 }
-                // 监听用户输入
-                if let Some(Button::Keyboard(key)) = event.press_args() {
+        // 监听用户输入
+        if let Some(Button::Keyboard(key)) = event.press_args() {
                     if key == piston_window::Key::R {
                         game.restart();
                         moving_period = INIT_MOVING_PERIOD;
                         ai_snake_speed_min = moving_period / 2.0;
                         ai_snake_speed_max = moving_period / 2.0;
                     }
-                    game.key_pressed(key);
-                }
-                // 清理当前窗口内容，并重新绘制游戏内容
+            game.key_pressed(key);
+        }
+        // 清理当前窗口内容，并重新绘制游戏内容
                 window.draw_2d(&event, |c, g, device| {
                     // 恐怖背景（递增）
                     let t = (bg_time * 0.1).sin() * 0.5 + 0.5;
@@ -268,7 +384,7 @@ fn main() {
                     rectangle(border_dark, [game_x+592.0, game_y, 8.0, 600.0], c.transform, g); // 右
                     // 游戏区内容平移
                     let c_game = &c.trans(game_x, game_y);
-                    game.draw(c_game, g);
+                    game.draw(c_game, g, bg_time);
                     // 在每个障碍物上绘制呼吸光效和红色“鬼”字（带变形）
                     let breath = ((bg_time * 2.0).sin() * 0.5 + 0.5) as f32; // 0~1
                     let obs = game.get_obstacles();
@@ -378,10 +494,10 @@ fn main() {
                     }
                     glyphs.factory.encoder.flush(device);
                 });
-                // 更新游戏数据
-                event.update(|arg| {
+        // 更新游戏数据
+        event.update(|arg| {
                     let prev_score = game.get_score();
-                    game.update(arg.dt);
+            game.update(arg.dt);
                     game.update_ai_snakes(ai_snake_speed_min, ai_snake_speed_max);
                     // 玩家吃到食物时AI蛇产卵
                     let new_score = game.get_score();

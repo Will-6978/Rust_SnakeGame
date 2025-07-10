@@ -22,6 +22,17 @@ const GAMEOVER_COLOR: Color = [0.90, 0.00, 0.00, 0.5];
 /// 移动周期，每过多长时间进行一次移动
 const MOVING_PERIOD: f64 = 0.18;
 
+/// AI蛇油滴粒子
+#[derive(Debug, Clone)]
+pub struct AIOilParticle {
+    pub x: f64,
+    pub y: f64,
+    pub vx: f64,
+    pub vy: f64,
+    pub life: f64, // 剩余寿命，秒
+    pub max_life: f64, // 初始寿命
+}
+
 /// 游戏主体
 #[derive(Debug)]
 pub struct Game {
@@ -55,6 +66,8 @@ pub struct Game {
     /// AI蛇移动计时器
     ai_snake_timer: f64,
     ai_snake_speed: f64,
+    /// AI蛇油滴粒子
+    pub ai_oil_particles: Vec<AIOilParticle>,
 }
 
 impl Game {
@@ -79,6 +92,7 @@ impl Game {
             ai_snakes: vec![AISnake::new(width-5, height-5)],
             ai_snake_timer: 0.0,
             ai_snake_speed: 0.18,
+            ai_oil_particles: Vec::new(),
         };
         game.generate_obstacles();
         game
@@ -137,8 +151,8 @@ impl Game {
     }
 
     /// 对外暴露的游戏绘制
-    pub fn draw(&self, con: &Context, g: &mut G2d) {
-        self.snake.draw(con, g);
+    pub fn draw(&self, con: &Context, g: &mut G2d, time: f64) {
+        self.snake.draw(con, g, time);
         for ai in &self.ai_snakes {
             // 残影
             let mut fade = 0.4;
@@ -149,7 +163,7 @@ impl Game {
             // 恐怖高光
             let (hx, hy) = ai.head_position();
             draw_block([1.0, 0.0, 0.0, 0.7], Shape::Round(6.0, 16), hx, hy, con, g);
-            ai.draw(con, g);
+            ai.draw(con, g, time);
         }
         if self.food_exists {
             // 食物发光外圈
@@ -167,6 +181,13 @@ impl Game {
             );
             // 食物高光
             draw_block([1.0, 0.8, 1.0, 0.7], Shape::Round(4.0, 16), self.food_x, self.food_y, con, g);
+        }
+        // 绘制AI蛇油滴粒子
+        use piston_window::ellipse;
+        for p in &self.ai_oil_particles {
+            let alpha = ((p.life / p.max_life) as f32).min(1.0) * 0.7;
+            let size = 6.0 * (p.life / p.max_life).max(0.4);
+            ellipse([0.08, 0.08, 0.08, alpha], [p.x - size/2.0, p.y - size/2.0, size, size * 1.2], con.transform, g);
         }
         // 绘制障碍物（深灰色）
         let obstacle_color: Color = [0.2, 0.2, 0.2, 1.0];
@@ -213,6 +234,55 @@ impl Game {
         if self.waiting_time > MOVING_PERIOD {
             self.update_snake(None)
         }
+
+        // AI蛇油滴粒子生成与更新
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        for ai in &self.ai_snakes {
+            // 头部坐标
+            let (hx, hy) = ai.head_position();
+            // 每帧有小概率生成油滴
+            if rng.gen_bool(0.012) {
+                let px = (hx as f64) * 20.0 + 10.0 + rng.gen_range(-3.0..3.0);
+                let py = (hy as f64) * 20.0 + 18.0;
+                let vx = rng.gen_range(-0.5..0.5);
+                let vy = rng.gen_range(1.2..2.0);
+                let life = rng.gen_range(0.7..1.2);
+                self.ai_oil_particles.push(AIOilParticle {
+                    x: px,
+                    y: py,
+                    vx,
+                    vy,
+                    life,
+                    max_life: life,
+                });
+            }
+            // 身体其他节也有更低概率掉落
+            for (i, block) in ai.body.iter().enumerate().skip(1).take(2) {
+                if rng.gen_bool(0.004) {
+                    let px = (block.x as f64) * 20.0 + 10.0 + rng.gen_range(-3.0..3.0);
+                    let py = (block.y as f64) * 20.0 + 18.0;
+                    let vx = rng.gen_range(-0.4..0.4);
+                    let vy = rng.gen_range(1.0..1.7);
+                    let life = rng.gen_range(0.6..1.0);
+                    self.ai_oil_particles.push(AIOilParticle {
+                        x: px,
+                        y: py,
+                        vx,
+                        vy,
+                        life,
+                        max_life: life,
+                    });
+                }
+            }
+        }
+        // 更新油滴粒子
+        for p in &mut self.ai_oil_particles {
+            p.x += p.vx * delta_time * 60.0;
+            p.y += p.vy * delta_time * 60.0;
+            p.life -= delta_time;
+        }
+        self.ai_oil_particles.retain(|p| p.life > 0.0);
     }
 
     /// 添加果子
@@ -333,6 +403,7 @@ impl Game {
         self.ai_snakes.push(AISnake::new(self.width-5, self.height-5));
         self.ai_snake_timer = 0.0;
         self.ai_snake_speed = 0.18;
+        self.ai_oil_particles.clear();
     }
 
     /// 获取当前分数
