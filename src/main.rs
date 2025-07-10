@@ -73,6 +73,20 @@ struct BloodMist {
     alpha: f32,
 }
 
+// 在main函数顶部添加怪核符号结构体
+#[derive(Clone)]
+struct WeirdcoreSymbol {
+    ch: &'static str,
+    x: f64,
+    y: f64,
+    angle: f64,
+    scale: f64,
+    alpha: f32,
+    life: f64,
+    max_life: f64,
+    color: [f32; 4],
+}
+
 fn main() {
     // 游戏区大小
     let (game_width, game_height) = (30, 30); // 600x600
@@ -147,6 +161,20 @@ fn main() {
     let mut ai_snake_speed_min: f64 = moving_period / 2.0;
     let mut ai_snake_speed_max: f64 = moving_period / 2.0;
     const INIT_MOVING_PERIOD: f64 = 0.18;
+
+    // 怪核符号池
+    let weirdcore_symbol_pool: [(&str, [f32; 4]); 8] = [
+        ("?", [0.9, 0.9, 0.2, 1.0]),
+        ("!", [1.0, 0.2, 0.2, 1.0]),
+        ("EXIT", [0.7, 0.7, 0.7, 1.0]),
+        ("ERROR", [0.8, 0.2, 0.8, 1.0]),
+        ("鬼", [0.9, 0.0, 0.0, 1.0]),
+        ("眼", [0.7, 0.7, 1.0, 1.0]),
+        ("门", [0.6, 0.6, 0.8, 1.0]),
+        ("手", [0.8, 0.8, 0.8, 1.0]),
+    ];
+    let mut weirdcore_symbols: Vec<WeirdcoreSymbol> = Vec::new();
+    let mut last_weirdcore_time: f64 = 0.0;
 
     // 监听窗口输入内容
     while let Some(event) = window.next() {
@@ -383,8 +411,48 @@ fn main() {
                     rectangle(border_dark, [game_x, game_y+592.0, 600.0, 8.0], c.transform, g); // 下
                     rectangle(border_dark, [game_x+592.0, game_y, 8.0, 600.0], c.transform, g); // 右
                     // 游戏区内容平移
-                    let c_game = &c.trans(game_x, game_y);
+                    // ====== 梦核/怪核全局画面抽搐与色彩扰动 ======
+                    let shake_period = 2.2;
+                    let shake_phase = (bg_time % shake_period) / shake_period;
+                    let shaking = shake_phase < 0.11;
+                    let mut shake_x = 0.0;
+                    let mut shake_y = 0.0;
+                    let mut shake_scale = 1.0;
+                    let mut shake_rot = 0.0;
+                    if shaking {
+                        // 画面抽搐参数
+                        let t = (shake_phase * std::f64::consts::PI * 2.0) as f64;
+                        shake_x = (bg_time * 23.0).sin() * 8.0 + (bg_time * 7.0).cos() * 4.0;
+                        shake_y = (bg_time * 17.0).cos() * 6.0 + (bg_time * 11.0).sin() * 3.0;
+                        shake_scale = 1.0 + (t * 2.0).sin() * 0.025;
+                        shake_rot = (t * 1.3).sin() * 0.04;
+                    }
+                    let c_game = &c.trans(game_x + shake_x, game_y + shake_y)
+                        .rot_rad(shake_rot)
+                        .scale(shake_scale, shake_scale);
+                    // 伪模糊/重影：抽搐时多绘制1~2层错位半透明内容
+                    if shaking {
+                        for i in 0..2 {
+                            let offset = 6.0 + i as f64 * 3.0;
+                            let scale = shake_scale * (1.0 + 0.012 * (i as f64 + 1.0));
+                            let rot = shake_rot + (i as f64 + 1.0) * 0.02;
+                            let c_blur = &c.trans(game_x + shake_x + offset, game_y + shake_y - offset)
+                                .rot_rad(rot)
+                                .scale(scale, scale);
+                            game.draw(c_blur, g, bg_time);
+                        }
+                    }
                     game.draw(c_game, g, bg_time);
+                    // 色彩扰动
+                    if shaking {
+                        let color_shift = [
+                            0.3 + 0.2 * (bg_time * 2.0).sin() as f32,
+                            0.1 + 0.3 * (bg_time * 1.3).cos() as f32,
+                            0.4 + 0.2 * (bg_time * 1.7).sin() as f32,
+                            0.18 + 0.18 * (shake_phase as f32),
+                        ];
+                        rectangle(color_shift, [game_x, game_y, 600.0, 600.0], c.transform, g);
+                    }
                     // 在每个障碍物上绘制呼吸光效和红色“鬼”字（带变形）
                     let breath = ((bg_time * 2.0).sin() * 0.5 + 0.5) as f32; // 0~1
                     let obs = game.get_obstacles();
@@ -491,6 +559,60 @@ fn main() {
                     if (bg_time * 1.2).cos() > 0.93 {
                         let transform_side = c.transform.trans(620.0, 700.0).rot_rad(0.3).scale(1.5, 1.5);
                         piston_window::text([0.9, 0.0, 0.0, 0.13], 32, "鬼", &mut glyphs, transform_side, g).ok();
+                    }
+                    // ====== 梦核/怪核符号随机浮现与闪现 ======
+                    // 生成新符号
+                    if bg_time - last_weirdcore_time > 1.5 + (bg_time * 0.7).sin().abs() * 1.2 {
+                        use rand::Rng;
+                        let mut rng = rand::thread_rng();
+                        let n = rng.gen_range(1..=2);
+                        for _ in 0..n {
+                            let (ch, color) = weirdcore_symbol_pool[rng.gen_range(0..weirdcore_symbol_pool.len())];
+                            let x = rng.gen_range(game_x + 40.0..game_x + 560.0);
+                            let y = rng.gen_range(game_y + 40.0..game_y + 560.0);
+                            let angle = rng.gen_range(-0.5..0.5);
+                            let scale = rng.gen_range(0.9..1.4);
+                            let max_life = rng.gen_range(0.18..0.38);
+                            weirdcore_symbols.push(WeirdcoreSymbol {
+                                ch,
+                                x,
+                                y,
+                                angle,
+                                scale,
+                                alpha: 0.0,
+                                life: max_life,
+                                max_life,
+                                color,
+                            });
+                        }
+                        last_weirdcore_time = bg_time;
+                    }
+                    // 更新并绘制符号
+                    let mut i = 0;
+                    while i < weirdcore_symbols.len() {
+                        let s = &mut weirdcore_symbols[i];
+                        let t = 1.0 - (s.life / s.max_life) as f32;
+                        // 透明度渐入渐出
+                        if t < 0.2 {
+                            s.alpha = t / 0.2;
+                        } else if t > 0.8 {
+                            s.alpha = (1.0 - t) / 0.2;
+                        } else {
+                            s.alpha = 1.0;
+                        }
+                        // 抖动/缩放/旋转
+                        let scale = s.scale * (1.0 + 0.08 * (bg_time * 7.0 + i as f64).sin());
+                        let angle = s.angle + (bg_time * 2.0 + i as f64).cos() * 0.08;
+                        let color = [s.color[0], s.color[1], s.color[2], s.color[3] * s.alpha];
+                        let transform = c.transform.trans(s.x, s.y).rot_rad(angle).scale(scale, scale);
+                        let font_size = if s.ch.len() > 2 { 28 } else { 38 };
+                        piston_window::text(color, font_size, s.ch, &mut glyphs, transform, g).ok();
+                        s.life -= 0.016;
+                        if s.life <= 0.0 {
+                            weirdcore_symbols.remove(i);
+                        } else {
+                            i += 1;
+                        }
                     }
                     glyphs.factory.encoder.flush(device);
                 });
