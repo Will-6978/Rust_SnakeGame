@@ -1,8 +1,9 @@
 use piston_window::types::Color;
-use piston_window::{clear, Button, PistonWindow, PressEvent, UpdateEvent, WindowSettings, Glyphs, TextureSettings, Transformed};
+use piston_window::{clear, Button, PistonWindow, PressEvent, UpdateEvent, WindowSettings, Glyphs, TextureSettings, Transformed, Key};
 use std::path::Path;
 use rand::Rng;
 use rand::seq::SliceRandom;
+use piston_window::{rectangle, ellipse};
 
 mod snake_game;
 mod snake_snake;
@@ -46,12 +47,17 @@ struct GhostDeform {
 }
 
 fn main() {
-    // 定义窗口大小的参数
-    let (width, height) = (30, 30);
+    // 游戏区大小
+    let (game_width, game_height) = (30, 30); // 600x600
+    // 窗口大小
+    let window_width = 700;
+    let window_height = 800;
+    // 游戏区左上角坐标（居中偏下）
+    let game_x = 50.0;
+    let game_y = 100.0;
 
-    // 定义游戏窗口
     let mut window: PistonWindow =
-        WindowSettings::new("Snake", [to_coord_u32(width), to_coord_u32(height)])
+        WindowSettings::new("Snake", [window_width, window_height])
             .exit_on_esc(true)
             .build()
             .unwrap();
@@ -62,7 +68,7 @@ fn main() {
     let mut glyphs = window.load_font(font).expect("无法加载字体文件");
 
     // 创建游戏
-    let mut game = Game::new(width, height);
+    let mut game = Game::new(game_width, game_height);
     // 初始为开始界面
     let mut state = GameState::Start;
 
@@ -105,57 +111,70 @@ fn main() {
     while let Some(event) = window.next() {
         match state {
             GameState::Start => {
-                // 恐怖风格开始界面
                 window.draw_2d(&event, |c, g, device| {
-                    // 血色渐变背景
-                    let t = (bg_time * 0.1).sin() * 0.5 + 0.5;
-                    let base = 0.15;
-                    let red = base + 0.5 * t as f32;
-                    let green = base * (1.0 - 0.2 * t as f32);
-                    let blue = base * (1.0 - 0.4 * t as f32);
-                    use piston_window::{rectangle, ellipse};
-                    for i in 0..30 {
-                        let k = i as f32 / 29.0;
-                        let color = [
-                            red * (1.0 - k) + blue * k,
-                            green * (1.0 - k) + red * k,
-                            blue * (1.0 - k) + red * k,
-                            1.0,
-                        ];
-                        rectangle(color, [0.0, i as f64 * 20.0, 600.0, 20.0], c.transform, g);
+                    // 动态血色渐变背景
+                    let t = (bg_time * 0.5).sin() * 0.5 + 0.5;
+                    let bg_color = [
+                        (0.1 + 0.2 * t) as f32,
+                        0.0,
+                        (0.08 + 0.12 * t) as f32,
+                        1.0,
+                    ];
+                    rectangle(bg_color, [0.0, 0.0, window_width as f64, window_height as f64], c.transform, g);
+
+                    // 居中大标题（血色渐变、滴血阴影）
+                    let title = "梦魇贪吃蛇";
+                    let title_size = 88;
+                    let title_w = title.chars().count() as f64 * title_size as f64 * 0.9;
+                    let title_x = (window_width as f64 - title_w) / 2.0 - 70.0;
+                    let title_y = 220.0;
+                    // 渐变阴影
+                    for i in 1..6 {
+                        let alpha = 0.18 - 0.03 * (i as f32);
+                        piston_window::text([0.7, 0.0, 0.0, alpha], title_size, title, &mut glyphs, c.transform.trans(title_x + (i as f64), title_y + (i as f64)), g).ok();
                     }
-                    // 随机血色粒子
-                    let mut rng = rand::thread_rng();
-                    for _ in 0..12 {
-                        if rng.gen_bool(0.08) {
-                            let x = rng.gen_range(40.0..560.0);
-                            let y = rng.gen_range(80.0..520.0);
-                            let r = rng.gen_range(8.0..22.0);
-                            ellipse([0.7, 0.0, 0.0, 0.18], [x, y, r, r], c.transform, g);
-                        }
+                    // 主标题
+                    piston_window::text([0.95, 0.0, 0.0, 1.0], title_size, title, &mut glyphs, c.transform.trans(title_x, title_y), g).unwrap();
+
+                    // 居中副标题
+                    let subtitle = "DREAM HORROR SNAKE";
+                    let subtitle_size = 32;
+                    let subtitle_w = subtitle.chars().count() as f64 * subtitle_size as f64 * 0.6;
+                    let subtitle_x = (window_width as f64 - subtitle_w) / 2.0 - 40.0;
+                    let subtitle_y = title_y + 70.0;
+                    piston_window::text([0.9, 0.2, 0.2, 0.7], subtitle_size, subtitle, &mut glyphs, c.transform.trans(subtitle_x, subtitle_y), g).ok();
+
+                    // 居中恐怖提示
+                    let tip = "按任意键进入噩梦";
+                    let tip_size = 36;
+                    let tip_w = tip.chars().count() as f64 * tip_size as f64 * 0.6;
+                    let tip_x = (window_width as f64 - tip_w) / 2.0 - 40.0;
+                    let tip_y = subtitle_y + 80.0;
+                    // 多层阴影
+                    for i in 1..4 {
+                        piston_window::text([0.0, 0.0, 0.0, 0.18], tip_size, tip, &mut glyphs, c.transform.trans(tip_x + (i as f64), tip_y + (i as f64)), g).ok();
                     }
-                    // 偶尔闪现血手印/鬼字
-                    if (bg_time * 1.7).sin() > 0.8 {
-                        let transform_ghost = c.transform.trans(320.0, 180.0).rot_rad(0.2).scale(2.5, 2.5);
-                        piston_window::text([0.9, 0.0, 0.0, 0.25], 32, "鬼", &mut glyphs, transform_ghost, g).ok();
-                    }
-                    if (bg_time * 1.3).cos() > 0.85 {
-                        let transform_blood = c.transform.trans(120.0, 400.0).rot_rad(-0.3).scale(2.0, 2.0);
-                        piston_window::text([0.8, 0.0, 0.0, 0.18], 32, "血", &mut glyphs, transform_blood, g).ok();
-                    }
-                    // 血红大字标题
-                    let title = "贪吃蛇";
-                    let transform_title_shadow = c.transform.trans(114.0, 204.0);
-                    let transform_title = c.transform.trans(110.0, 200.0);
-                    piston_window::text([0.0, 0.0, 0.0, 0.7], 72, title, &mut glyphs, transform_title_shadow, g).ok();
-                    piston_window::text([0.9, 0.0, 0.0, 1.0], 72, title, &mut glyphs, transform_title, g).unwrap();
-                    // 暗红提示
-                    let tip = "按任意键开始";
-                    let transform_tip = c.transform.trans(180.0, 320.0);
-                    piston_window::text([0.7, 0.0, 0.0, 0.8], 32, tip, &mut glyphs, transform_tip, g).unwrap();
+                    piston_window::text([1.0, 0.2, 0.2, 1.0], tip_size, tip, &mut glyphs, c.transform.trans(tip_x, tip_y), g).unwrap();
+
+                    // 居中底部血池
+                    let pool_w = 480.0;
+                    let pool_h = 90.0;
+                    let pool_x = (window_width as f64 - pool_w) / 2.0;
+                    let pool_y = window_height as f64 - 90.0;
+                    ellipse([0.5, 0.0, 0.0, 0.7], [pool_x, pool_y, pool_w, pool_h], c.transform, g);
+                    // 居中血滴
+                    let drop_x = window_width as f64 / 2.0 - 9.0;
+                    ellipse([0.7, 0.0, 0.0, 0.7], [drop_x, pool_y - 30.0, 18.0, 24.0], c.transform, g);
+                    ellipse([0.7, 0.0, 0.0, 0.5], [drop_x + 24.0, pool_y - 18.0, 8.0, 10.0], c.transform, g);
+                    ellipse([0.7, 0.0, 0.0, 0.5], [drop_x - 24.0, pool_y - 18.0, 8.0, 10.0], c.transform, g);
+
+                    // 左右两侧对称恐怖符号点缀
+                    let side_y = window_height as f64 / 2.0 + 60.0;
+                    piston_window::text([0.8, 0.0, 0.0, 0.4], 48, "卍", &mut glyphs, c.transform.trans(40.0, side_y), g).ok();
+                    piston_window::text([0.8, 0.0, 0.0, 0.4], 48, "鬼", &mut glyphs, c.transform.trans(window_width as f64 - 80.0, side_y), g).ok();
+
                     glyphs.factory.encoder.flush(device);
                 });
-                // 任意按键进入游戏
                 if let Some(Button::Keyboard(_)) = event.press_args() {
                     state = GameState::Playing;
                 }
@@ -172,21 +191,21 @@ fn main() {
                         let green = base * (1.0 - 0.08 * (level as f32));
                         let blue = base * (1.0 - 0.12 * (level as f32));
                         use piston_window::rectangle;
-                        for i in 0..30 {
-                            let k = i as f32 / 29.0;
+                        for i in 0..40 {
+                            let k = i as f32 / 39.0;
                             let color = [
                                 red * (1.0 - k) + blue * k,
                                 green * (1.0 - k) + red * k,
                                 blue * (1.0 - k) + red * k,
                                 1.0,
                             ];
-                            rectangle(color, [0.0, i as f64 * 20.0, 600.0, 20.0], c.transform, g);
+                            rectangle(color, [0.0, i as f64 * 20.0, window_width as f64, 20.0], c.transform, g);
                         }
                         // 恐怖关卡切换界面
                         let over_text = format!("第{}关完成", game.level);
                         let tip_text = "按任意键进入下一关";
-                        let transform_over = c.transform.trans(148.0, 256.0);
-                        let transform_tip = c.transform.trans(180.0, 320.0);
+                        let transform_over = c.transform.trans(210.0, 400.0);
+                        let transform_tip = c.transform.trans(220.0, 480.0);
                         piston_window::text([1.0, 0.2, 0.2, 1.0], 56, &over_text, &mut glyphs, transform_over, g).unwrap();
                         piston_window::text([1.0, 1.0, 0.2, 1.0], 28, tip_text, &mut glyphs, transform_tip, g).unwrap();
                         glyphs.factory.encoder.flush(device);
@@ -221,35 +240,35 @@ fn main() {
                     let green = base * (1.0 - 0.08 * (level as f32));
                     let blue = base * (1.0 - 0.12 * (level as f32));
                     use piston_window::{rectangle, ellipse};
-                    for i in 0..30 {
-                        let k = i as f32 / 29.0;
+                    for i in 0..40 {
+                        let k = i as f32 / 39.0;
                         let color = [
                             red * (1.0 - k) + blue * k,
                             green * (1.0 - k) + red * k,
                             blue * (1.0 - k) + red * k,
                             1.0,
                         ];
-                        rectangle(color, [0.0, i as f64 * 20.0, 600.0, 20.0], c.transform, g);
+                        rectangle(color, [0.0, i as f64 * 20.0, window_width as f64, 20.0], c.transform, g);
                     }
+                    // 游戏区外半透明黑色分隔带
+                    rectangle([0.0, 0.0, 0.0, 0.45], [0.0, 0.0, window_width as f64, game_y], c.transform, g); // 顶部
+                    rectangle([0.0, 0.0, 0.0, 0.45], [0.0, game_y + 600.0, window_width as f64, window_height as f64 - (game_y + 600.0)], c.transform, g); // 底部
                     // 游戏区血色发光边框
                     let border_glow = [0.8, 0.0, 0.0, 0.18];
-                    rectangle(border_glow, [-12.0, -12.0, 624.0, 24.0], c.transform, g); // 上
-                    rectangle(border_glow, [-12.0, -12.0, 24.0, 624.0], c.transform, g); // 左
-                    rectangle(border_glow, [-12.0, 588.0, 624.0, 24.0], c.transform, g); // 下
-                    rectangle(border_glow, [588.0, -12.0, 24.0, 624.0], c.transform, g); // 右
+                    rectangle(border_glow, [game_x-12.0, game_y-12.0, 624.0, 24.0], c.transform, g); // 上
+                    rectangle(border_glow, [game_x-12.0, game_y-12.0, 24.0, 624.0], c.transform, g); // 左
+                    rectangle(border_glow, [game_x-12.0, game_y+588.0, 624.0, 24.0], c.transform, g); // 下
+                    rectangle(border_glow, [game_x+588.0, game_y-12.0, 24.0, 624.0], c.transform, g); // 右
                     // 游戏区立体边框
                     let border_light = [0.9, 0.9, 0.9, 1.0];
                     let border_dark = [0.2, 0.0, 0.0, 1.0];
-                    rectangle(border_light, [0.0, 0.0, 600.0, 8.0], c.transform, g); // 上
-                    rectangle(border_light, [0.0, 0.0, 8.0, 600.0], c.transform, g); // 左
-                    rectangle(border_dark, [0.0, 592.0, 600.0, 8.0], c.transform, g); // 下
-                    rectangle(border_dark, [592.0, 0.0, 8.0, 600.0], c.transform, g); // 右
-                    // 星空特效
-                    for star in &stars {
-                        let star_color = [0.7, 0.85, 1.0, 0.8];
-                        ellipse(star_color, [star.x, star.y, star.size, star.size], c.transform, g);
-                    }
-                    game.draw(&c, g);
+                    rectangle(border_light, [game_x, game_y, 600.0, 8.0], c.transform, g); // 上
+                    rectangle(border_light, [game_x, game_y, 8.0, 600.0], c.transform, g); // 左
+                    rectangle(border_dark, [game_x, game_y+592.0, 600.0, 8.0], c.transform, g); // 下
+                    rectangle(border_dark, [game_x+592.0, game_y, 8.0, 600.0], c.transform, g); // 右
+                    // 游戏区内容平移
+                    let c_game = &c.trans(game_x, game_y);
+                    game.draw(c_game, g);
                     // 在每个障碍物上绘制呼吸光效和红色“鬼”字（带变形）
                     let breath = ((bg_time * 2.0).sin() * 0.5 + 0.5) as f32; // 0~1
                     let obs = game.get_obstacles();
@@ -264,8 +283,8 @@ fn main() {
                     }
                     for (i, &(ox, oy)) in obs.iter().enumerate() {
                         // 呼吸光圈
-                        let x = (ox as f64) * 20.0;
-                        let y = (oy as f64) * 20.0;
+                        let x = (ox as f64) * 20.0 + game_x;
+                        let y = (oy as f64) * 20.0 + game_y;
                         let glow_color = [1.0, 0.3, 0.3, 0.18 + 0.22 * breath];
                         let glow_size = 28.0 + 8.0 * breath as f64;
                         ellipse(glow_color, [x + 10.0 - glow_size/2.0, y + 10.0 - glow_size/2.0, glow_size, glow_size], c.transform, g);
@@ -293,30 +312,41 @@ fn main() {
                             death_pos = Some(((hx as f64) * 20.0 + 10.0, (hy as f64) * 20.0 + 10.0));
                         }
                         // 半透明黑色遮罩
-                        rectangle([0.0, 0.0, 0.0, 0.6], [0.0, 0.0, 600.0, 600.0], c.transform, g);
-                        // 粒子特效
+                        rectangle([0.0, 0.0, 0.0, 0.6], [0.0, 0.0, window_width as f64, window_height as f64], c.transform, g);
+                        // 居中粒子特效
                         for p in &particles {
-                            let color = [0.8, 0.0, 0.0, (p.life / 1.2).min(1.0) as f32];
-                            piston_window::ellipse(color, [p.x-3.0, p.y-3.0, 6.0, 6.0], c.transform, g);
+                            let px = p.x + game_x;
+                            let py = p.y + game_y;
+                            ellipse([0.8, 0.0, 0.0, (p.life / 1.2).min(1.0) as f32], [px, py, 6.0, 6.0], c.transform, g);
                         }
-                        // 屏幕闪烁
-                        if flash_timer > 0.0 && ((flash_timer * 20.0) as i32) % 2 == 0 {
-                            rectangle([1.0, 0.0, 0.0, 0.18], [0.0, 0.0, 600.0, 600.0], c.transform, g);
+                        // 居中闪光
+                        let flash_alpha = (flash_timer * 20.0).sin().abs().min(1.0) * 0.5;
+                        if flash_alpha > 0.01 {
+                            rectangle([1.0, 1.0, 1.0, flash_alpha as f32], [game_x, game_y, 600.0, 600.0], c.transform, g);
                         }
                         // 大字“游戏结束”
                         let over_text = "游戏结束";
-                        let transform_over_shadow = c.transform.trans(152.0, 260.0);
-                        let transform_over = c.transform.trans(148.0, 256.0);
-                        piston_window::text([0.0, 0.0, 0.0, 0.7], 56, over_text, &mut glyphs, transform_over_shadow, g).ok();
-                        piston_window::text([1.0, 0.2, 0.2, 1.0], 56, over_text, &mut glyphs, transform_over, g).unwrap();
+                        let over_size = 56;
+                        let over_w = over_text.chars().count() as f64 * over_size as f64 * 0.9;
+                        let over_x = (window_width as f64 - over_w) / 2.0 - 70.0;
+                        let transform_over_shadow = c.transform.trans(over_x + 4.0, 340.0);
+                        let transform_over = c.transform.trans(over_x, 336.0);
+                        piston_window::text([0.0, 0.0, 0.0, 0.7], over_size, over_text, &mut glyphs, transform_over_shadow, g).ok();
+                        piston_window::text([1.0, 0.2, 0.2, 1.0], over_size, over_text, &mut glyphs, transform_over, g).unwrap();
                         // 分数和关卡
                         let result_text = format!("分数: {}   关卡: {}", game.get_score(), game.get_level());
-                        let transform_result = c.transform.trans(170.0, 320.0);
-                        piston_window::text([1.0, 1.0, 1.0, 1.0], 32, &result_text, &mut glyphs, transform_result, g).unwrap();
+                        let result_size = 32;
+                        let result_w = result_text.chars().count() as f64 * result_size as f64 * 0.6;
+                        let result_x = (window_width as f64 - result_w) / 2.0 - 40.0;
+                        let transform_result = c.transform.trans(result_x, 400.0);
+                        piston_window::text([1.0, 1.0, 1.0, 1.0], result_size, &result_text, &mut glyphs, transform_result, g).unwrap();
                         // 重开提示
                         let tip_text = "按R键重新开始";
-                        let transform_tip = c.transform.trans(180.0, 370.0);
-                        piston_window::text([1.0, 1.0, 0.2, 1.0], 24, tip_text, &mut glyphs, transform_tip, g).unwrap();
+                        let tip_size = 24;
+                        let tip_w = tip_text.chars().count() as f64 * tip_size as f64 * 0.6;
+                        let tip_x = (window_width as f64 - tip_w) / 2.0 - 40.0;
+                        let transform_tip = c.transform.trans(tip_x, 460.0);
+                        piston_window::text([1.0, 1.0, 0.2, 1.0], tip_size, tip_text, &mut glyphs, transform_tip, g).unwrap();
                     }
                     // AI蛇产卵爆炸粒子
                     ai_egg_particles.iter_mut().for_each(|p| {
@@ -331,19 +361,19 @@ fn main() {
                     }
                     // 顶部UI：关卡/分数/目标
                     let goal_text = format!("第{}关 目标分数：{}/{}  总分：{}", game.level, game.level_score, snake_game::game::Game::LEVEL_GOAL, game.get_score());
-                    let transform_goal = c.transform.trans(60.0, 32.0);
-                    piston_window::text([0.9, 0.0, 0.0, 1.0], 28, &goal_text, &mut glyphs, transform_goal, g).unwrap();
+                    let transform_goal = c.transform.trans(60.0, 60.0);
+                    piston_window::text([0.9, 0.0, 0.0, 1.0], 32, &goal_text, &mut glyphs, transform_goal, g).unwrap();
                     // 底部UI：操作提示
                     let tip_text = "P暂停  R重开  方向键移动";
-                    let transform_tip = c.transform.trans(180.0, 590.0);
-                    piston_window::text([0.7, 0.0, 0.0, 0.8], 20, tip_text, &mut glyphs, transform_tip, g).unwrap();
+                    let transform_tip = c.transform.trans(180.0, 780.0);
+                    piston_window::text([0.7, 0.0, 0.0, 0.8], 24, tip_text, &mut glyphs, transform_tip, g).unwrap();
                     // 侧边偶尔闪现恐怖符号
                     if (bg_time * 1.5).sin() > 0.92 {
-                        let transform_side = c.transform.trans(20.0, 300.0).rot_rad(-0.4).scale(1.8, 1.8);
+                        let transform_side = c.transform.trans(20.0, 400.0).rot_rad(-0.4).scale(1.8, 1.8);
                         piston_window::text([0.8, 0.0, 0.0, 0.18], 32, "手", &mut glyphs, transform_side, g).ok();
                     }
                     if (bg_time * 1.2).cos() > 0.93 {
-                        let transform_side = c.transform.trans(560.0, 500.0).rot_rad(0.3).scale(1.5, 1.5);
+                        let transform_side = c.transform.trans(620.0, 700.0).rot_rad(0.3).scale(1.5, 1.5);
                         piston_window::text([0.9, 0.0, 0.0, 0.13], 32, "鬼", &mut glyphs, transform_side, g).ok();
                     }
                     glyphs.factory.encoder.flush(device);
