@@ -2,6 +2,7 @@ use piston_window::types::Color;
 use piston_window::{clear, Button, PistonWindow, PressEvent, UpdateEvent, WindowSettings, Glyphs, TextureSettings, Transformed};
 use std::path::Path;
 use rand::Rng;
+use rand::seq::SliceRandom;
 
 mod snake_game;
 mod snake_snake;
@@ -34,6 +35,14 @@ struct Particle {
     vx: f64,
     vy: f64,
     life: f64,
+}
+
+// 鬼字变形状态
+struct GhostDeform {
+    scale: f64,
+    angle: f64,
+    color: [f32; 4],
+    tear: bool,
 }
 
 fn main() {
@@ -75,6 +84,10 @@ fn main() {
     let mut particles: Vec<Particle> = Vec::new();
     let mut flash_timer: f64 = 0.0;
     let mut death_pos: Option<(f64, f64)> = None;
+
+    // 鬼字变形状态
+    let mut ghost_deforms: Vec<GhostDeform> = vec![];
+    let mut ghost_deform_timer: f64 = 0.0;
 
     // 监听窗口输入内容
     while let Some(event) = window.next() {
@@ -178,20 +191,39 @@ fn main() {
                     piston_window::text([1.0, 1.0, 0.2, 1.0], 28, &score_text, &mut glyphs, transform_score, g).unwrap();
                     piston_window::text([0.0, 0.0, 0.0, 0.5], 24, &level_text, &mut glyphs, transform_level_shadow, g).ok();
                     piston_window::text([0.2, 0.8, 1.0, 1.0], 24, &level_text, &mut glyphs, transform_level, g).unwrap();
-                    // 在每个障碍物上绘制呼吸光效和红色“鬼”字
+                    // 在每个障碍物上绘制呼吸光效和红色“鬼”字（带变形）
                     let breath = ((bg_time * 2.0).sin() * 0.5 + 0.5) as f32; // 0~1
-                    for &(ox, oy) in game.get_obstacles() {
+                    let obs = game.get_obstacles();
+                    // 初始化变形状态
+                    if ghost_deforms.len() != obs.len() {
+                        ghost_deforms = obs.iter().map(|_| GhostDeform {
+                            scale: 1.0,
+                            angle: 0.0,
+                            color: [1.0, 0.0, 0.0, 1.0],
+                            tear: false,
+                        }).collect();
+                    }
+                    for (i, &(ox, oy)) in obs.iter().enumerate() {
                         // 呼吸光圈
                         let x = (ox as f64) * 20.0;
                         let y = (oy as f64) * 20.0;
                         let glow_color = [1.0, 0.3, 0.3, 0.18 + 0.22 * breath];
                         let glow_size = 28.0 + 8.0 * breath as f64;
                         ellipse(glow_color, [x + 10.0 - glow_size/2.0, y + 10.0 - glow_size/2.0, glow_size, glow_size], c.transform, g);
-                        // "鬼"字
-                        let tx = x + 2.0;
+                        // 变形参数
+                        let deform = &ghost_deforms[i];
+                        let tx = x + 2.0 + 8.0 * (1.0 - deform.scale); // 缩放时居中
                         let ty = y + 18.0;
-                        let transform_ghost = c.transform.trans(tx, ty);
-                        piston_window::text([1.0, 0.0, 0.0, 1.0], 16, "鬼", &mut glyphs, transform_ghost, g).ok();
+                        let mut transform_ghost = c.transform.trans(tx, ty)
+                            .rot_rad(deform.angle)
+                            .scale(deform.scale, deform.scale);
+                        piston_window::text(deform.color, 16, "鬼", &mut glyphs, transform_ghost, g).ok();
+                        // 流泪
+                        if deform.tear {
+                            let tear_x = x + 10.0;
+                            let tear_y = y + 26.0;
+                            ellipse([0.8, 0.0, 0.0, 0.8], [tear_x-2.0, tear_y, 4.0, 6.0], c.transform, g);
+                        }
                     }
                     // 游戏结束界面美化
                     if game.is_game_over() {
@@ -281,6 +313,22 @@ fn main() {
                         particles.clear();
                         flash_timer = 0.0;
                         death_pos = None;
+                    }
+                    // 鬼字变形定时器
+                    ghost_deform_timer += arg.dt;
+                    if ghost_deform_timer > 1.2 {
+                        ghost_deform_timer = 0.0;
+                        let obs = game.get_obstacles();
+                        let mut rng = rand::thread_rng();
+                        for deform in &mut ghost_deforms {
+                            if rng.gen_bool(0.25) {
+                                deform.scale = rng.gen_range(0.8..1.3);
+                                deform.angle = rng.gen_range(-0.4..0.4);
+                                let c = rng.gen_range(0.7..1.0) as f32;
+                                deform.color = [c, 0.0, 0.0, 1.0];
+                                deform.tear = rng.gen_bool(0.18);
+                            }
+                        }
                     }
                 });
             }
