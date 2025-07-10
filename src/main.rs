@@ -286,7 +286,6 @@ fn main() {
                     }
 
                     // ====== 血色雾气动态更新与绘制 ======
-                    use piston_window::ellipse;
                     for mist in &mut blood_mists {
                         mist.x += mist.dx;
                         mist.y += mist.dy;
@@ -544,13 +543,107 @@ fn main() {
                         piston_window::ellipse(color, [p.0-2.0, p.1-2.0, 4.0, 4.0], c.transform, g);
                     }
                     // 顶部UI：关卡/分数/目标
+                    // ====== 怪诞哥特风格游戏区UI边框（提前绘制，避免遮挡游戏内容） ======
+                    use piston_window::{line, polygon};
+                    let border_outer = [0.08, 0.08, 0.12, 0.7]; // 加透明度
+                    let border_inner = [0.7, 0.0, 0.1, 0.5];
+                    let border_highlight = [0.95, 0.95, 0.98, 0.13];
+                    let border_x = game_x - 8.0;
+                    let border_y = game_y - 8.0;
+                    let border_w = 616.0;
+                    let border_h = 616.0;
+                    // 外黑框（只画边线）
+                    rectangle(border_outer, [border_x, border_y, border_w, 8.0], c.transform, g); // 上
+                    rectangle(border_outer, [border_x, border_y+border_h-8.0, border_w, 8.0], c.transform, g); // 下
+                    rectangle(border_outer, [border_x, border_y, 8.0, border_h], c.transform, g); // 左
+                    rectangle(border_outer, [border_x+border_w-8.0, border_y, 8.0, border_h], c.transform, g); // 右
+                    // 内血红细线
+                    rectangle(border_inner, [game_x-2.0, game_y-2.0, 604.0, 4.0], c.transform, g); // 上
+                    rectangle(border_inner, [game_x-2.0, game_y+602.0, 604.0, 4.0], c.transform, g); // 下
+                    rectangle(border_inner, [game_x-2.0, game_y-2.0, 4.0, 604.0], c.transform, g); // 左
+                    rectangle(border_inner, [game_x+602.0, game_y-2.0, 4.0, 604.0], c.transform, g); // 右
+                    // 内高光
+                    rectangle(border_highlight, [game_x+4.0, game_y+4.0, 592.0, 2.0], c.transform, g); // 上
+                    rectangle(border_highlight, [game_x+4.0, game_y+596.0, 592.0, 2.0], c.transform, g); // 下
+                    rectangle(border_highlight, [game_x+4.0, game_y+4.0, 2.0, 592.0], c.transform, g); // 左
+                    rectangle(border_highlight, [game_x+596.0, game_y+4.0, 2.0, 592.0], c.transform, g); // 右
+                    // 四角哥特装饰（圆+三角）
+                    let goth_color = [0.3, 0.0, 0.1, 0.5];
+                    let tri = |cx, cy, r, a| {
+                        let ang = a as f64;
+                        [
+                            [cx + r * (ang).cos(), cy + r * (ang).sin()],
+                            [cx + r * (ang+2.3).cos(), cy + r * (ang+2.3).sin()],
+                            [cx + r * (ang-2.3).cos(), cy + r * (ang-2.3).sin()],
+                        ]
+                    };
+                    ellipse(goth_color, [border_x-10.0, border_y-10.0, 20.0, 20.0], c.transform, g); // 左上
+                    polygon(goth_color, &tri(border_x+10.0, border_y+10.0, 14.0, 2.4), c.transform, g);
+                    ellipse(goth_color, [border_x+border_w-10.0, border_y-10.0, 20.0, 20.0], c.transform, g); // 右上
+                    polygon(goth_color, &tri(border_x+border_w-10.0, border_y+10.0, 14.0, 0.7), c.transform, g);
+                    ellipse(goth_color, [border_x-10.0, border_y+border_h-10.0, 20.0, 20.0], c.transform, g); // 左下
+                    polygon(goth_color, &tri(border_x+10.0, border_y+border_h-10.0, 14.0, -2.4), c.transform, g);
+                    ellipse(goth_color, [border_x+border_w-10.0, border_y+border_h-10.0, 20.0, 20.0], c.transform, g); // 右下
+                    polygon(goth_color, &tri(border_x+border_w-10.0, border_y+border_h-10.0, 14.0, -0.7), c.transform, g);
+                    // 内侧裂纹/滴血
+                    for i in 0..8 {
+                        let fx = game_x + 20.0 + i as f64 * 70.0 + (bg_time*2.0+i as f64).sin()*2.0;
+                        let fy = game_y + 4.0 + (bg_time*1.7+i as f64).cos()*4.0;
+                        line([0.5,0.0,0.0,0.5], 2.0, [fx, fy, fx+6.0, fy+18.0], c.transform, g);
+                        ellipse([0.7,0.0,0.0,0.5], [fx+3.0, fy+18.0, 5.0, 7.0], c.transform, g);
+                    }
+                    // ====== 恐怖梦核风格UI ======
+                    let t = bg_time;
                     let goal_text = format!("第{}关 目标分数：{}/{}  总分：{}", game.level, game.level_score, snake_game::game::Game::LEVEL_GOAL, game.get_score());
-                    let transform_goal = c.transform.trans(60.0, 60.0);
-                    piston_window::text([0.9, 0.0, 0.0, 1.0], 32, &goal_text, &mut glyphs, transform_goal, g).unwrap();
-                    // 底部UI：操作提示
                     let tip_text = "P暂停  R重开  方向键移动";
-                    let transform_tip = c.transform.trans(180.0, 780.0);
-                    piston_window::text([0.7, 0.0, 0.0, 0.8], 24, tip_text, &mut glyphs, transform_tip, g).unwrap();
+                    let goal_x = 60.0;
+                    let goal_y = 60.0;
+                    let tip_x = 180.0;
+                    let tip_y = 780.0;
+                    let size_goal = 36;
+                    let size_tip = 26;
+                    // 动态参数
+                    let shake_x = (t*2.1).sin()*2.0;
+                    let shake_y = (t*1.7).cos()*2.0;
+                    let scale = 1.0 + (t*0.9).sin()*0.03;
+                    let main_color = [0.8,0.7,1.0,1.0];
+                    let glow_color = [0.9, 0.2, 0.8, (0.5 + 0.3*(t*1.3).sin().abs()) as f32];
+                    let shadow_color = [0.0,0.0,0.0,0.5];
+                    let remnant_color = [0.2,0.2,0.3,0.4];
+                    // 残影
+                    piston_window::text(remnant_color, size_goal, &goal_text, &mut glyphs, c.transform.trans(goal_x+3.0, goal_y+3.0).scale(scale,scale), g).ok();
+                    piston_window::text(remnant_color, size_tip, tip_text, &mut glyphs, c.transform.trans(tip_x+3.0, tip_y+3.0).scale(scale,scale), g).ok();
+                    // 发光
+                    piston_window::text(glow_color, size_goal, &goal_text, &mut glyphs, c.transform.trans(goal_x, goal_y).scale(scale,scale), g).ok();
+                    piston_window::text(glow_color, size_tip, tip_text, &mut glyphs, c.transform.trans(tip_x, tip_y).scale(scale,scale), g).ok();
+                    // 主体
+                    piston_window::text(main_color, size_goal, &goal_text, &mut glyphs, c.transform.trans(goal_x+shake_x, goal_y+shake_y).scale(scale,scale), g).unwrap();
+                    piston_window::text(main_color, size_tip, tip_text, &mut glyphs, c.transform.trans(tip_x+shake_x, tip_y+shake_y).scale(scale,scale), g).unwrap();
+                    // 阴影
+                    piston_window::text(shadow_color, size_goal, &goal_text, &mut glyphs, c.transform.trans(goal_x, goal_y+2.0), g).ok();
+                    piston_window::text(shadow_color, size_tip, tip_text, &mut glyphs, c.transform.trans(tip_x, tip_y+2.0), g).ok();
+                    // ====== UI旁梦核符号 ======
+                    let symbol_pool = ["?", "!", "鬼", "ERROR", "EXIT", "门", "眼"];
+                    let mut rng = rand::thread_rng();
+                    for i in 0..2 {
+                        let idx = ((t*0.7+i as f64*1.3).sin().abs() * (symbol_pool.len() as f64)).floor() as usize % symbol_pool.len();
+                        let ch = symbol_pool[idx];
+                        let sx = goal_x + 320.0 + (i as f64)*60.0 + (t*1.2+i as f64).sin()*18.0;
+                        let sy = goal_y + 8.0 + (t*1.5+i as f64).cos()*12.0;
+                        let alpha = 0.18 + 0.18*(t*1.7+i as f64).sin().abs() as f32;
+                        let color = [0.8,0.2,0.8,alpha];
+                        piston_window::text(color, 28, ch, &mut glyphs, c.transform.trans(sx, sy), g).ok();
+                    }
+                    // ====== UI下方漂浮雾气 ======
+                    for i in 0..2 {
+                        let mx = goal_x + 180.0 + (t*0.8+i as f64*1.7).sin()*60.0;
+                        let my = goal_y + 38.0 + (t*1.1+i as f64*1.3).cos()*10.0;
+                        let rx = 80.0 + (t*1.2+i as f64*1.5).sin()*18.0;
+                        let ry = 22.0 + (t*1.3+i as f64*1.2).cos()*6.0;
+                        let alpha = 0.10 + 0.10*(t*1.5+i as f64).sin().abs() as f32;
+                        let color = [0.7,0.2,0.8,alpha];
+                        ellipse(color, [mx-rx/2.0, my-ry/2.0, rx, ry], c.transform, g);
+                    }
                     // 侧边偶尔闪现恐怖符号
                     if (bg_time * 1.5).sin() > 0.92 {
                         let transform_side = c.transform.trans(20.0, 400.0).rot_rad(-0.4).scale(1.8, 1.8);
