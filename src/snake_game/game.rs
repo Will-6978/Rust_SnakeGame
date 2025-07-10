@@ -1,4 +1,4 @@
-use crate::snake_snake::snake::{Direction, Snake};
+use crate::snake_snake::snake::{Direction, Snake, AISnake};
 use crate::snake_window::draw::{draw_block, draw_rectangle};
 use piston_window::rectangle::Shape;
 use piston_window::types::Color;
@@ -49,6 +49,8 @@ pub struct Game {
     level: u32,
     /// 障碍物位置
     obstacles: Vec<(i32, i32)>,
+    /// AI蛇列表
+    pub ai_snakes: Vec<AISnake>,
 }
 
 impl Game {
@@ -67,6 +69,7 @@ impl Game {
             score: 0,
             level: 1,
             obstacles: Vec::new(),
+            ai_snakes: vec![AISnake::new(width-5, height-5)],
         };
         game.generate_obstacles();
         game
@@ -120,6 +123,9 @@ impl Game {
     /// 对外暴露的游戏绘制
     pub fn draw(&self, con: &Context, g: &mut G2d) {
         self.snake.draw(con, g);
+        for ai in &self.ai_snakes {
+            ai.draw(con, g);
+        }
         if self.food_exists {
             // 食物发光外圈
             use piston_window::ellipse;
@@ -288,5 +294,37 @@ impl Game {
     /// 获取当前分数
     pub fn get_score(&self) -> u32 {
         self.score
+    }
+
+    /// 更新AI蛇
+    pub fn update_ai_snakes(&mut self) {
+        use rand::seq::SliceRandom;
+        for ai in &mut self.ai_snakes {
+            // 追逐最近障碍物
+            let (hx, hy) = ai.head_position();
+            if let Some(&(tx, ty)) = self.obstacles.iter().min_by_key(|&&(x, y)| (x-hx).abs() + (y-hy).abs()) {
+                // 简单贪心：优先横向或纵向靠近
+                let dx = tx - hx;
+                let dy = ty - hy;
+                let dir = if dx.abs() > dy.abs() {
+                    if dx > 0 { Direction::Right } else { Direction::Left }
+                } else if dy != 0 {
+                    if dy > 0 { Direction::Down } else { Direction::Up }
+                } else {
+                    ai.direction // 已到达
+                };
+                ai.move_forward_wrap(Some(dir), self.width, self.height);
+            } else {
+                // 无障碍物，随机游走
+                let mut rng = rand::thread_rng();
+                if rng.gen_bool(0.1) {
+                    let dirs = [Direction::Up, Direction::Down, Direction::Left, Direction::Right];
+                    let dir = *dirs.choose(&mut rng).unwrap();
+                    ai.move_forward_wrap(Some(dir), self.width, self.height);
+                } else {
+                    ai.move_forward_wrap(None, self.width, self.height);
+                }
+            }
+        }
     }
 }

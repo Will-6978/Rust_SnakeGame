@@ -264,6 +264,7 @@ fn main() {
                 // 更新游戏数据
                 event.update(|arg| {
                     game.update(arg.dt);
+                    game.update_ai_snakes();
                     // 星空移动和背景时间推进
                     bg_time += arg.dt;
                     for star in &mut stars {
