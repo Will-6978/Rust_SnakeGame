@@ -288,6 +288,8 @@ fn main() {
                     if new_score > prev_score {
                         game.ai_snake_lay_egg_now(&mut ai_egg_particles);
                     }
+                    // 检查玩家与AI蛇碰撞
+                    game.check_player_ai_collision();
                     // 星空移动和背景时间推进
                     bg_time += arg.dt;
                     for star in &mut stars {

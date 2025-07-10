@@ -20,7 +20,7 @@ const R_BORDER_COLOR: Color = [0.0000, 0.5, 0.5, 0.6];
 const GAMEOVER_COLOR: Color = [0.90, 0.00, 0.00, 0.5];
 
 /// 移动周期，每过多长时间进行一次移动
-const MOVING_PERIOD: f64 = 0.3;
+const MOVING_PERIOD: f64 = 0.18;
 
 /// 游戏主体
 #[derive(Debug)]
@@ -74,7 +74,7 @@ impl Game {
             obstacles: Vec::new(),
             ai_snakes: vec![AISnake::new(width-5, height-5)],
             ai_snake_timer: 0.0,
-            ai_snake_speed: 0.3,
+            ai_snake_speed: 0.18,
         };
         game.generate_obstacles();
         game
@@ -314,11 +314,12 @@ impl Game {
 
     /// 更新AI蛇
     pub fn update_ai_snakes(&mut self) {
+        if self.game_pause { return; }
         use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
-        self.ai_snake_speed += rng.gen_range(-0.03..0.03);
-        if self.ai_snake_speed < 0.15 { self.ai_snake_speed = 0.15; }
-        if self.ai_snake_speed > 0.6 { self.ai_snake_speed = 0.6; }
+        self.ai_snake_speed += rng.gen_range(-0.02..0.02);
+        if self.ai_snake_speed < 0.10 { self.ai_snake_speed = 0.10; }
+        if self.ai_snake_speed > 0.36 { self.ai_snake_speed = 0.36; }
         self.ai_snake_timer += 0.016;
         if self.ai_snake_timer < self.ai_snake_speed { return; }
         self.ai_snake_timer = 0.0;
@@ -338,19 +339,18 @@ impl Game {
     pub fn check_player_ai_collision(&mut self) {
         let (px, py) = self.snake.head_position();
         for ai in &self.ai_snakes {
-            for (i, block) in ai.body.iter().enumerate() {
+            for block in &ai.body {
                 if px == block.x && py == block.y {
                     self.game_over = true;
                     return;
                 }
-                // 只检测AI蛇头和身体前3节，增加恐怖感
-                if i > 2 { break; }
             }
         }
     }
 
-    /// 玩家吃到食物时让所有AI蛇产卵
+    /// 玩家吃到食物时让所有AI蛇产卵并变长
     pub fn ai_snake_lay_egg_now(&mut self, particles: &mut Vec<(f64, f64, f64, f64, f64)>) {
+        if self.game_pause { return; }
         let mut to_add = vec![];
         let mut rng = rand::thread_rng();
         for ai in &mut self.ai_snakes {
@@ -367,6 +367,9 @@ impl Game {
                     particles.push((hx as f64 * 20.0 + 10.0, hy as f64 * 20.0 + 10.0, vx, vy, 0.7));
                 }
             }
+            // AI蛇变长2节
+            ai.restore_tail();
+            ai.restore_tail();
         }
         for (x, y) in to_add {
             self.obstacles.push((x, y));
