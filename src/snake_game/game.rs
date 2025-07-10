@@ -3,6 +3,7 @@ use crate::snake_window::draw::{draw_block, draw_rectangle};
 use piston_window::rectangle::Shape;
 use piston_window::types::Color;
 use piston_window::{Context, G2d, Key};
+use piston_window::Glyphs;
 use rand::{thread_rng, Rng};
 
 /// 食物颜色
@@ -151,8 +152,8 @@ impl Game {
     }
 
     /// 对外暴露的游戏绘制
-    pub fn draw(&self, con: &Context, g: &mut G2d, time: f64) {
-        self.snake.draw(con, g, time);
+    pub fn draw(&self, con: &Context, g: &mut G2d, time: f64, glyphs: &mut Glyphs) {
+        self.snake.draw(con, g, time); // 玩家蛇不需要glyphs
         for ai in &self.ai_snakes {
             // 残影
             let mut fade = 0.4;
@@ -163,24 +164,11 @@ impl Game {
             // 恐怖高光
             let (hx, hy) = ai.head_position();
             draw_block([1.0, 0.0, 0.0, 0.7], Shape::Round(6.0, 16), hx, hy, con, g);
-            ai.draw(con, g, time);
+            ai.draw(con, g, time); // AI蛇不需要glyphs
         }
         if self.food_exists {
-            // 食物发光外圈
-            use piston_window::ellipse;
-            let fx = (self.food_x as f64) * 20.0;
-            let fy = (self.food_y as f64) * 20.0;
-            ellipse([0.9, 0.5, 1.0, 0.25], [fx-8.0, fy-8.0, 36.0, 36.0], con.transform, g);
-            draw_block(
-                FOOD_COLOR,
-                Shape::Round(8.0, 16),
-                self.food_x,
-                self.food_y,
-                con,
-                g,
-            );
-            // 食物高光
-            draw_block([1.0, 0.8, 1.0, 0.7], Shape::Round(4.0, 16), self.food_x, self.food_y, con, g);
+            // 怪核符号果
+            draw_weirdcore_food(self.food_x, self.food_y, con, g, time, glyphs);
         }
         // 绘制AI蛇油滴粒子
         use piston_window::ellipse;
@@ -471,5 +459,66 @@ impl Game {
         for (x, y) in to_add {
             self.obstacles.push((x, y));
         }
+    }
+}
+
+// 怪核符号池
+const WEIRDCORE_SYMBOLS: [(&str, [f32; 4]); 8] = [
+    ("?", [0.9, 0.9, 0.2, 1.0]),
+    ("!", [1.0, 0.2, 0.2, 1.0]),
+    ("EXIT", [0.7, 0.7, 0.7, 1.0]),
+    ("ERROR", [0.8, 0.2, 0.8, 1.0]),
+    ("鬼", [0.9, 0.0, 0.0, 1.0]),
+    ("眼", [0.7, 0.7, 1.0, 1.0]),
+    ("门", [0.6, 0.6, 0.8, 1.0]),
+    ("手", [0.8, 0.8, 0.8, 1.0]),
+];
+
+/// 怪核符号果绘制
+pub fn draw_weirdcore_food(x: i32, y: i32, con: &Context, g: &mut G2d, time: f64, glyphs: &mut Glyphs) {
+    use piston_window::{ellipse, line, Transformed};
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    // 1. 选取符号和主色（随时间变化）
+    let idx = ((time * 0.7).sin().abs() * (WEIRDCORE_SYMBOLS.len() as f64)).floor() as usize % WEIRDCORE_SYMBOLS.len();
+    let (ch, color) = WEIRDCORE_SYMBOLS[idx];
+    // 2. 动态参数
+    let base_x = (x as f64) * 20.0;
+    let base_y = (y as f64) * 20.0;
+    let t = (time * 2.0).sin();
+    let scale = 1.0 + 0.13 * (time * 1.7).sin() + 0.07 * (time * 2.9).cos();
+    let rot = (time * 1.2).sin() * 0.18;
+    let alpha = 0.85 + 0.15 * (time * 3.1).cos();
+    // 3. 光晕/阴影
+    let glow_color = [color[0], color[1], color[2], 0.18 + 0.12 * (time * 2.7).sin().abs() as f32];
+    ellipse(glow_color, [base_x - 8.0, base_y - 8.0, 36.0, 36.0], con.transform, g);
+    // 4. 主体符号
+    let font_size = if ch.len() > 2 { 18 } else { 28 };
+    let symbol_color = [color[0], color[1], color[2], alpha as f32];
+    let transform = con.transform.trans(base_x + 10.0, base_y + 10.0).rot_rad(rot).scale(scale, scale);
+    piston_window::text(symbol_color, font_size, ch, glyphs, transform, g).ok();
+    // 5. 噪点/裂缝
+    for i in 0..rng.gen_range(3..7) {
+        let angle = time * 2.0 + i as f64 * 1.3;
+        let r = 10.0 + 6.0 * (angle * 1.2).sin();
+        let px = base_x + 10.0 + r * (angle).cos();
+        let py = base_y + 10.0 + r * (angle).sin();
+        let dot_alpha = 0.18 + 0.18 * (angle * 1.7).sin().abs() as f32;
+        ellipse([0.08, 0.08, 0.08, dot_alpha], [px, py, 2.0, 2.0], con.transform, g);
+        if i % 2 == 0 {
+            // 裂缝
+            let x2 = px + 2.0 * (angle * 2.1).cos();
+            let y2 = py + 2.0 * (angle * 2.1).sin();
+            line([0.08, 0.08, 0.08, dot_alpha], 1.0, [px, py, x2, y2], con.transform, g);
+        }
+    }
+    // 6. 符号碎片/漂浮点
+    for i in 0..rng.gen_range(2..5) {
+        let angle = time * 1.3 + i as f64 * 2.2;
+        let r = 18.0 + 8.0 * (angle * 1.1).cos();
+        let px = base_x + 10.0 + r * (angle).cos();
+        let py = base_y + 10.0 + r * (angle).sin();
+        let frag_alpha = 0.10 + 0.10 * (angle * 1.9).sin().abs() as f32;
+        ellipse([color[0], color[1], color[2], frag_alpha], [px, py, 2.5, 2.5], con.transform, g);
     }
 }

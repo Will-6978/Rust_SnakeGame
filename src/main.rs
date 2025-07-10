@@ -412,20 +412,20 @@ fn main() {
                     rectangle(border_dark, [game_x+592.0, game_y, 8.0, 600.0], c.transform, g); // 右
                     // 游戏区内容平移
                     // ====== 梦核/怪核全局画面抽搐与色彩扰动 ======
-                    let shake_period = 2.2;
+                    let shake_period = 4.4; // 频率减半
                     let shake_phase = (bg_time % shake_period) / shake_period;
-                    let shaking = shake_phase < 0.11;
+                    let shaking = shake_phase < 0.08; // 持续时间也略缩短
                     let mut shake_x = 0.0;
                     let mut shake_y = 0.0;
                     let mut shake_scale = 1.0;
                     let mut shake_rot = 0.0;
                     if shaking {
-                        // 画面抽搐参数
+                        // 画面抽搐参数（幅度减小）
                         let t = (shake_phase * std::f64::consts::PI * 2.0) as f64;
-                        shake_x = (bg_time * 23.0).sin() * 8.0 + (bg_time * 7.0).cos() * 4.0;
-                        shake_y = (bg_time * 17.0).cos() * 6.0 + (bg_time * 11.0).sin() * 3.0;
-                        shake_scale = 1.0 + (t * 2.0).sin() * 0.025;
-                        shake_rot = (t * 1.3).sin() * 0.04;
+                        shake_x = (bg_time * 23.0).sin() * 3.5 + (bg_time * 7.0).cos() * 1.5;
+                        shake_y = (bg_time * 17.0).cos() * 2.5 + (bg_time * 11.0).sin() * 1.2;
+                        shake_scale = 1.0 + (t * 2.0).sin() * 0.012;
+                        shake_rot = (t * 1.3).sin() * 0.018;
                     }
                     let c_game = &c.trans(game_x + shake_x, game_y + shake_y)
                         .rot_rad(shake_rot)
@@ -433,16 +433,16 @@ fn main() {
                     // 伪模糊/重影：抽搐时多绘制1~2层错位半透明内容
                     if shaking {
                         for i in 0..2 {
-                            let offset = 6.0 + i as f64 * 3.0;
-                            let scale = shake_scale * (1.0 + 0.012 * (i as f64 + 1.0));
-                            let rot = shake_rot + (i as f64 + 1.0) * 0.02;
+                            let offset = 2.0 + i as f64 * 1.2;
+                            let scale = shake_scale * (1.0 + 0.004 * (i as f64 + 1.0));
+                            let rot = shake_rot + (i as f64 + 1.0) * 0.007;
                             let c_blur = &c.trans(game_x + shake_x + offset, game_y + shake_y - offset)
                                 .rot_rad(rot)
                                 .scale(scale, scale);
-                            game.draw(c_blur, g, bg_time);
+                            game.draw(c_blur, g, bg_time, &mut glyphs);
                         }
                     }
-                    game.draw(c_game, g, bg_time);
+                    game.draw(c_game, g, bg_time, &mut glyphs);
                     // 色彩扰动
                     if shaking {
                         let color_shift = [
