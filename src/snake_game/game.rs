@@ -51,6 +51,9 @@ pub struct Game {
     obstacles: Vec<(i32, i32)>,
     /// AI蛇列表
     pub ai_snakes: Vec<AISnake>,
+    /// AI蛇移动计时器
+    ai_snake_timer: f64,
+    ai_snake_speed: f64,
 }
 
 impl Game {
@@ -70,6 +73,8 @@ impl Game {
             level: 1,
             obstacles: Vec::new(),
             ai_snakes: vec![AISnake::new(width-5, height-5)],
+            ai_snake_timer: 0.0,
+            ai_snake_speed: 0.3,
         };
         game.generate_obstacles();
         game
@@ -124,6 +129,15 @@ impl Game {
     pub fn draw(&self, con: &Context, g: &mut G2d) {
         self.snake.draw(con, g);
         for ai in &self.ai_snakes {
+            // 残影
+            let mut fade = 0.4;
+            for block in ai.body.iter().skip(1).take(4) {
+                draw_block([0.7, 0.0, 0.0, fade], Shape::Round(12.5, 16), block.x, block.y, con, g);
+                fade *= 0.6;
+            }
+            // 恐怖高光
+            let (hx, hy) = ai.head_position();
+            draw_block([1.0, 0.0, 0.0, 0.7], Shape::Round(6.0, 16), hx, hy, con, g);
             ai.draw(con, g);
         }
         if self.food_exists {
@@ -299,6 +313,14 @@ impl Game {
     /// 更新AI蛇
     pub fn update_ai_snakes(&mut self) {
         use rand::seq::SliceRandom;
+        // 动态调整AI蛇速度（0.2~0.6，玩家为0.3）
+        let mut rng = rand::thread_rng();
+        self.ai_snake_speed += rng.gen_range(-0.03..0.03);
+        if self.ai_snake_speed < 0.15 { self.ai_snake_speed = 0.15; }
+        if self.ai_snake_speed > 0.6 { self.ai_snake_speed = 0.6; }
+        self.ai_snake_timer += 0.016; // 约每帧
+        if self.ai_snake_timer < self.ai_snake_speed { return; }
+        self.ai_snake_timer = 0.0;
         for ai in &mut self.ai_snakes {
             // 追逐最近障碍物
             let (hx, hy) = ai.head_position();
@@ -324,6 +346,21 @@ impl Game {
                 } else {
                     ai.move_forward_wrap(None, self.width, self.height);
                 }
+            }
+        }
+    }
+
+    /// 玩家与AI蛇碰撞检测
+    pub fn check_player_ai_collision(&mut self) {
+        let (px, py) = self.snake.head_position();
+        for ai in &self.ai_snakes {
+            for (i, block) in ai.body.iter().enumerate() {
+                if px == block.x && py == block.y {
+                    self.game_over = true;
+                    return;
+                }
+                // 只检测AI蛇头和身体前3节，增加恐怖感
+                if i > 2 { break; }
             }
         }
     }

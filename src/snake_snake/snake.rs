@@ -32,9 +32,9 @@ impl Direction {
 
 /// 块，蛇的身体的最小单元
 #[derive(Debug, Clone)]
-struct Block {
-    x: i32,
-    y: i32,
+pub struct Block {
+    pub x: i32,
+    pub y: i32,
 }
 
 /// 定义蛇的数据
